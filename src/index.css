@@ -1,0 +1,296 @@
+body {
+  font-family: 'font-super-sans-vf', sans-serif;
+  margin: 0;
+  background-color: antiquewhite;
+}
+
+
+
+
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+#head {
+  display: flex;
+  justify-content: space-between;
+  gap: 880px;
+  background-color: antiquewhite;
+  margin: -10px;
+  margin-bottom: 0px;
+}
+
+#two {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+  margin-left: 10px;
+}
+
+#name1 {
+  display: flex;
+  margin-top: 20px;
+  margin-left: -10px;
+}
+
+#name2 {
+  color: blueviolet;
+  font-weight: bold;
+}
+
+#name3 {
+  font-weight: bold;
+  color: black;
+}
+
+#symbol {
+  background-color: brown;
+  color: aliceblue;
+  font-weight: bold;
+  padding: 10px;
+  border-radius: 10%;
+  margin: 10px;
+
+}
+
+#sigin {
+
+  border-radius: 10px;
+  border: none;
+  padding: 10px;
+  background-color: brown;
+  color: aliceblue;
+  margin-top: 20px;
+  margin-right: 20px;
+
+}
+
+#bi {
+  flex: 1;
+  /* take all space between header and footer */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+#middle1,
+#middle2 {
+  display: flex;
+  justify-content: center;
+  margin: 20px
+}
+
+#middle1 {
+  font-size: 61px;
+  color: antiquewhite;
+}
+
+#mb {
+
+  border-radius: 10px;
+  border: none;
+  padding: 10px;
+  background-color: brown;
+  color: aliceblue;
+  margin-top: 20px;
+  margin-right: 20px;
+  width: 80px
+}
+
+#mb:hover,
+#sigin:hover {
+
+  transform: translateY(-1px);
+}
+
+#foot {
+  background-color: brown;
+  display: flex;
+  justify-content: space-around;
+  gap: 880px;
+}
+
+#fone,
+#ftwo {
+  color: aliceblue;
+  padding: 10px;
+}
+
+#bl {
+  margin-top: 20px;
+  margin-left: 20px;
+
+}
+
+#backButton {
+  border-radius: 10px;
+  border: none;
+  padding: 10px;
+  background-color: brown;
+  color: aliceblue;
+}
+
+#top {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-top: 100px;
+
+}
+
+#bottom {
+  background-color: white;
+  padding: 20px;
+  border-radius: 10px;
+}
+
+#bottom h3 {
+  text-align: center;
+  margin-top: 0;
+}
+
+#symbol1 {
+  background-color: brown;
+  color: aliceblue;
+  font-weight: bold;
+  padding: 10px;
+  border-radius: 10%;
+  margin-right: 100px;
+  margin-left: 100px;
+  text-align: center;
+}
+
+/* #emailLabel,
+#passwordLabel {
+  display: flex;
+  margin-bottom: 10px;
+} */
+input[type="email"],
+input[type="password"] {
+  padding: 5px;
+  border-radius: 5px;
+  border: 1px solid #ccc;
+  width: 100%;
+  margin-right: 10px;
+  margin-bottom: 20px;
+}
+
+#loginButton {
+  border-radius: 10px;
+  border: none;
+  padding: 10px;
+  background-color: brown;
+  color: aliceblue;
+  width: 80%;
+  margin-left: 10%;
+  margin-top: 20px;
+}
+
+#stats {
+  display: flex;
+  justify-content: space-around;
+  margin-top: 20px;
+  margin-bottom: 20px;
+  gap: px;
+}
+
+#stats1 {
+  background-color: white;
+  color: black;
+  padding: 10px;
+  border-radius: 10%;
+  margin-right: 0px;
+  margin-left: 81px;
+  width: 500px;
+  padding-left: 31px;
+  border: 1px solid #ccc;
+  
+}
+
+#stats2 {
+  background-color: white;
+  color: black;
+  padding: 10px;
+  border-radius: 10%;
+  margin-right: 81px;
+  margin-left: 200px;
+  width: 500px;
+  padding-left: 31px;
+  border: 1px solid #ccc;
+}
+
+#symbol2 {
+  background-color: brown;
+  color: aliceblue;
+  font-weight: bold;
+  padding: 10px;
+  border-radius: 10%;
+  margin-right: 200px;
+  margin-left: 160px;
+  text-align: center;
+  margin-top: 80px;
+}
+
+#name4 {
+  display: flex;
+  margin-top: 20px;
+  margin-left: 124px;
+}
+
+table {
+
+  margin-top: 20px;
+  width: 90%;
+  border-collapse: collapse;
+  text-align: left;
+  margin-left: 47px;
+  margin-right: 20px;
+  margin-bottom: 20px;
+  border: 1px solid #090909;
+  border-radius: 5px;
+}
+th {
+  background: #9f9b93;
+  padding: 10px;
+  text-transform: uppercase;
+  border: 1px solid #e6e4e3;
+}
+
+td {
+  padding: 10px;
+  border: 1px solid #e6e4e3;
+  background: #fbfaf8;
+}
+
+#inventory,#managers {
+  padding: 10px;
+  margin-right: 100px;
+  margin-left: 100px;
+  background-color: white;
+  border-radius: 10px;
+  margin-bottom: 20px;
+}
+#ih
+{
+  text-align: left;
+  margin-top: 10px;
+  margin-left: 47px;
+  color:black;
+}
+#head1 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: antiquewhite;
+  margin: -10px;
+  padding: 0 10px;
+}
+#ownerpage {
+  min-height: 100vh;
+  background-color:aliceblue;
+}
