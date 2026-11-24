@@ -1,46 +1,68 @@
-import { useState } from 'react'
-import LandingPage from './Pages/LandingPage'
-import LoginPage from './Pages/LoginPage'
-import OwnerPage from './Pages/OwnerPage'
-import ManagerPage from './Pages/ManagerPage'
-import WorkerPage from './Pages/WorkerPage'
+import { useState, useEffect } from 'react';
+import LandingPage from './Pages/LandingPage';
+import LoginPage from './Pages/LoginPage';
+import OwnerPage from './Pages/OwnerPage';
+import ManagerPage from './Pages/ManagerPage';
+import WorkerPage from './Pages/WorkerPage';
+import { getCurrentUser, api } from './api';
 
 function App() {
-  const [screen, setScreen] = useState('landing');
+  const [currentUser, setCurrentUser] = useState(() => getCurrentUser());
+  const [screen, setScreen] = useState(() => {
+    const user = getCurrentUser();
+    if (user && user.role) {
+      return user.role;
+    }
+    return typeof localStorage !== 'undefined' ? localStorage.getItem('currentScreen') || 'landing' : 'landing';
+  });
 
-  // shared data so worker requests reach the manager
-  const [timber, setTimber] = useState([
-    { id: 1, type: 'Teak', size: '10x10', qty: 100, min: 20, price: 10000, date: '2026-10-01' },
-    { id: 2, type: 'Rosewood', size: '5x5', qty: 50, min: 10, price: 50000, date: '2026-10-12' },
-    { id: 3, type: 'Mahogany', size: '3x3', qty: 30, min: 10, price: 5000, date: '2026-10-20' },
-    { id: 4, type: 'Oak', size: '2x2', qty: 8, min: 15, price: 15000, date: '2026-11-02' },
-  ]);
-  const [requests, setRequests] = useState([]);
-  const [workers, setWorkers] = useState([
-    { name: 'Ravi K', email: 'worker@gmail.com' },
-    { name: 'Anil S', email: 'anil@example.com' },
-  ]);
-  const [txns, setTxns] = useState([]);
-  const store = { timber, setTimber, requests, setRequests, workers, setWorkers, txns, setTxns };
+  // Keep screen state persistent across browser refreshes
+  useEffect(() => {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('currentScreen', screen);
+    }
+  }, [screen]);
 
-  if (screen == 'landing') {
-    return <LandingPage onnavtologin={() => setScreen('login')} />
+  const handleLoginSuccess = (role, user) => {
+    setCurrentUser(user);
+    setScreen(role);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('currentScreen', role);
+      if (user) {
+        localStorage.setItem('user', JSON.stringify(user));
+      }
+    }
+  };
+
+  const handleSignOut = () => {
+    api.logout();
+    setCurrentUser(null);
+    setScreen('login');
+  };
+
+  if (screen === 'landing') {
+    return <LandingPage onnavtologin={() => setScreen('login')} />;
+  } else if (screen === 'login') {
+    return (
+      <LoginPage
+        onLoginsuccess={handleLoginSuccess}
+        onnavtolanding={() => setScreen('landing')}
+      />
+    );
+  } else if (screen === 'owner') {
+    return <OwnerPage onsignout={handleSignOut} />;
+  } else if (screen === 'manager') {
+    return <ManagerPage onsignout={handleSignOut} />;
+  } else if (screen === 'worker') {
+    return (
+      <WorkerPage
+        name={currentUser?.name || 'Worker'}
+        onsignout={handleSignOut}
+      />
+    );
   }
-  else if (screen == 'login') {
-    return <LoginPage
-      onLoginsuccess={(role) => setScreen(role)}
-      onnavtolanding={() => setScreen('landing')}
-    />
-  }
-  else if (screen == 'owner') {
-    return <OwnerPage onsignout={() => setScreen('login')} />
-  }
-  else if (screen == 'manager') {
-    return <ManagerPage store={store} onsignout={() => setScreen('login')} />
-  }
-  else if (screen == 'worker') {
-    return <WorkerPage store={store} name="Ravi K" onsignout={() => setScreen('login')} />
-  }
+
+  return <LandingPage onnavtologin={() => setScreen('login')} />;
 }
 
 export default App;

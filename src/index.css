@@ -4,9 +4,6 @@ body {
   background-color: antiquewhite;
 }
 
-
-
-
 #root {
   min-height: 100vh;
   display: flex;
@@ -294,3 +291,262 @@ td {
   min-height: 100vh;
   background-color:aliceblue;
 }
+.op {
+  min-height: 100vh;
+  background: #f4ede2;
+  color: #2b1d14;
+  box-sizing: border-box;
+}
+.op *,
+.op *::before,
+.op *::after {
+  box-sizing: border-box;
+}
+
+/* header */
+.opheader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 28px;
+  background: antiquewhite;
+  border-bottom: 2px solid brown;
+}
+.opbrand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.oplogo {
+  background: brown;
+  color: aliceblue;
+  font-weight: bold;
+  padding: 9px 11px;
+  border-radius: 4px;
+}
+.opname {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 20px;
+  font-weight: bold;
+}
+.opname span {
+  color: blueviolet;
+}
+.opright {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.opwho {
+  font-size: 14px;
+  color: #6b4a3a;
+}
+.opbtn {
+  border: none;
+  border-radius: 4px;
+  padding: 9px 16px;
+  margin: 0;
+  background: brown;
+  color: aliceblue;
+  cursor: pointer;
+}
+.opbtn:hover {
+  background: #8a1f1f;
+}
+
+.opmain {
+  max-width: 1150px;
+  margin: 0 auto;
+  padding: 28px 20px 50px;
+  display: grid;
+  grid-template-columns: 210px minmax(0, 1fr);
+  gap: 32px;
+  align-items: start;
+}
+.opcontent {
+  min-width: 0;
+}
+
+
+.opstats {
+  position: sticky;
+  top: 20px;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border: 1px solid #272524;
+}
+.opstat {
+  padding: 16px 20px;
+  border-bottom: 1px solid #0b0b0a;
+}
+.opstat:last-child {
+  border-bottom: none;
+}
+.opnum {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-variant-numeric: lining-nums;
+  font-size: 26px;
+  color: rgb(24, 22, 22);
+}
+.oplbl {
+  margin-top: 2px;
+  font-size: 26px;
+  color: #161615;
+}
+
+/* section heading */
+.ophead {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  border-bottom: 2px solid rgb(247, 241, 241);
+  padding-bottom: 6px;
+}
+.ophead h2 {
+  margin: 0;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 22px;
+}
+.ophead input {
+  padding: 6px 10px;
+  border: 1px solid #c9b8a3;
+  border-radius: 3px;
+  background: #fff;
+  width: 200px;
+  margin: 0;
+}
+
+/* tables: override global table/th/td in index.css */
+.opscroll {
+  overflow-x: auto;
+  margin-bottom: 34px;
+}
+.op table {
+  width: 100%;
+  margin: 0;
+  border: 1px solid #c9b8a3;
+  border-top: none;
+  border-collapse: collapse;
+  text-align: left;
+  background: #f7f4f4;
+}
+.op th {
+  background: #5c3a28;
+  color: #f4ede2;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: none;
+  padding: 9px 12px;
+  border: 1px solid #5c3a28;
+  white-space: nowrap;
+}
+.op td {
+  padding: 9px 12px;
+  border: 1px solid #080707;
+  background: #ffffff;
+  white-space: nowrap;
+}
+.op tbody tr:nth-child(even) td {
+  background: #ffffff;
+}
+.op .r {
+  text-align: right;
+}
+.op .low {
+  color: #f8f7f7;
+  font-size: 12px;
+}
+.opempty {
+  text-align: center;
+  color: #888;
+}
+
+@media (max-width: 800px) {
+  .opmain {
+    grid-template-columns: 1fr;
+  }
+  .opstats {
+    position: static;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .opstat {
+    flex: 1 1 120px;
+    border-bottom: none;
+    border-right: 1px solid #e3d6c4;
+  }
+}
+@media (max-width: 600px) {
+  .opheader { padding: 8px 12px; }
+  .opwho { display: none; }
+  .ophead input { width: 130px; }
+}
+/* extra styles for Manager + Worker pages (uses OwnerPage.css too) */
+.rptabs { display: flex; gap: 8px; margin-bottom: 22px; flex-wrap: wrap; }
+.rptabs button {
+  border: 1px solid rgb(22, 22, 22);
+  border-radius: 4px;
+  padding: 8px 16px;
+  background: #fff;
+  color: rgb(21, 21, 21);
+  cursor: pointer;
+}
+.rptabs button.on { background: rgb(255, 255, 255); color: rgb(15, 16, 16); }
+
+.rptools { display: flex; gap: 8px; align-items: center; }
+.op select,
+.ophead input,
+.rpform input,
+.rpform select {
+  padding: 6px 10px;
+  border: 1px solid #c9b8a3;
+  border-radius: 3px;
+  background: #fff;
+  margin: 0;
+}
+.rpform {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  background: #fff;
+  border: 1px solid #272524;
+  padding: 14px;
+  margin: 12px 0 28px;
+}
+.rpform h3 { width: 100%; margin: 0; font-family: Georgia, 'Times New Roman', serif; }
+.rpform input[type="text"],
+.rpform input[type="number"],
+.rpform input[type="email"],
+.rpform input[type="password"],
+.rpform input[type="tel"] { width: 150px; }
+
+.rpbtn {
+  border: none;
+  border-radius: 4px;
+  padding: 7px 14px;
+  background: brown;
+  color: aliceblue;
+  cursor: pointer;
+}
+.rpbtn:hover { background: #8a1f1f; }
+.rpbtn.grey { background: #6b6b6b; }
+
+.rptag { padding: 2px 8px; border-radius: 10px; font-size: 12px; color: #f0f0f0; }
+.rptag.ok { background: #757474; }
+.rptag.warn { background: #898787; }
+.rptag.bad { background: #b71c1c; }
+
+.rpalert {
+  background: #f7f7f7;
+  border: 1px solid #f9f9f9;
+  padding: 10px 14px;
+  margin-bottom: 20px;
+}
+.rpmsg { color: #b71c1c; margin: 0 0 12px; }
+
+.rpchart { background: #fff; border: 1px solid #272524; padding: 14px; margin-bottom: 28px; }
+.rpbar { display: flex; align-items: center; gap: 10px; margin: 6px 0; }
+.rpbar span:first-child { width: 90px; }
+.rpbar div { height: 18px; background: brown; border-radius: 2px; }
