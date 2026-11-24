@@ -130,8 +130,8 @@ export default function ManagerPage({ onsignout }) {
 
     // Chart calculations for FR3
     const stockItems = stats?.stockByType || [];
-    const maxQty = Math.max(...stockItems.map((s) => Number(s.qty || 0)), 1);
-    const maxValue = Math.max(...stockItems.map((s) => Number(s.value || 0)), 1);
+    const totalQty = stockItems.reduce((acc, s) => acc + Number(s.qty || 0), 0);
+    const totalValue = stockItems.reduce((acc, s) => acc + Number(s.value || 0), 0);
 
     const tabs = [
         ['inventory', 'Timber Stock'],
@@ -268,7 +268,7 @@ export default function ManagerPage({ onsignout }) {
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                                     {stockItems.length === 0 && <p className="opempty">No stock records found.</p>}
                                     {stockItems.map((item) => {
-                                        const pct = Math.round((Number(item.qty || 0) / maxQty) * 100);
+                                        const pct = totalQty > 0 ? Math.round((Number(item.qty || 0) / totalQty) * 100) : 0;
                                         return (
                                             <div key={item.type}>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '14px' }}>
@@ -317,7 +317,7 @@ export default function ManagerPage({ onsignout }) {
                                 </h3>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                                     {stockItems.map((item) => {
-                                        const pctVal = Math.round((Number(item.value || 0) / maxValue) * 100);
+                                        const pctVal = totalValue > 0 ? Math.round((Number(item.value || 0) / totalValue) * 100) : 0;
                                         return (
                                             <div key={item.type}>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '14px' }}>
