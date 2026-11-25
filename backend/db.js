@@ -225,6 +225,8 @@ export async function initDb() {
         FROM add_timber_request atr
         JOIN timber_type tt ON tt.type_id = atr.type_id;
 
+        ALTER TABLE stock_transaction ADD COLUMN IF NOT EXISTS performed_by TEXT;
+
         CREATE OR REPLACE VIEW txns AS
         SELECT 
           st.txn_id as id,
@@ -232,7 +234,7 @@ export async function initDb() {
           st.txn_type as kind,
           coalesce(tt.type_name, 'Timber')::varchar as type,
           st.quantity as qty,
-          coalesce(w.name, m.name, 'System')::varchar as by,
+          coalesce(st.performed_by, w.name, m.name, 'Rakesh (Worker)')::varchar as by,
           st.txn_time as created_at
         FROM stock_transaction st
         LEFT JOIN timber t ON t.timber_id = st.timber_id

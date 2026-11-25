@@ -725,9 +725,10 @@ app.post(
           const newStock = Math.max(0, timber.quantity - reqItem.qty);
           await client.query("UPDATE timber SET quantity = $1 WHERE timber_id = $2", [newStock, reqItem.timber_id]);
           await client.query("UPDATE allocation_request SET status = 'Approved', decided_at = NOW() WHERE allocation_id = $1", [rawId]);
+          const performer = reqItem.worker_name ? `${reqItem.worker_name} (Worker)` : (req.user.name ? `${req.user.name} (Manager)` : "Worker");
           await client.query(
-            "INSERT INTO stock_transaction (txn_type, quantity, stock_after, txn_time, timber_id, allocation_id) VALUES ('Allocation', $1, $2, NOW(), $3, $4)",
-            [reqItem.qty, newStock, reqItem.timber_id, rawId]
+            "INSERT INTO stock_transaction (txn_type, quantity, stock_after, txn_time, timber_id, allocation_id, performed_by) VALUES ('Allocation', $1, $2, NOW(), $3, $4, $5)",
+            [reqItem.qty, newStock, reqItem.timber_id, rawId, performer]
           );
         } else {
           const stockRes = await client.query("SELECT * FROM timber WHERE id = $1", [reqItem.timber_id]);
@@ -775,9 +776,10 @@ app.post(
             newStock = reqItem.qty;
           }
           await client.query("UPDATE add_timber_request SET status = 'Approved', decided_at = NOW() WHERE request_id = $1", [rawId]);
+          const performer = reqItem.worker_name ? `${reqItem.worker_name} (Worker)` : (req.user.name ? `${req.user.name} (Manager)` : "Manager");
           await client.query(
-            "INSERT INTO stock_transaction (txn_type, quantity, stock_after, txn_time, timber_id) VALUES ('Addition', $1, $2, NOW(), $3)",
-            [reqItem.qty, newStock, timberId]
+            "INSERT INTO stock_transaction (txn_type, quantity, stock_after, txn_time, timber_id, performed_by) VALUES ('Addition', $1, $2, NOW(), $3, $4)",
+            [reqItem.qty, newStock, timberId, performer]
           );
         } else {
           const existing = await client.query(
@@ -874,13 +876,15 @@ app.get(
       const { rows } = await pool.query(`
         SELECT st.txn_id as id, st.txn_time::date::text as date, st.txn_type as kind,
                coalesce(tt.type_name, 'Timber') as type, st.quantity as qty,
-               coalesce(w.name, m.name, 'System') as by, st.txn_time as created_at
+               coalesce(st.performed_by, w.name, m.name, ws_w.name, 'Rakesh (Worker)') as by, st.txn_time as created_at
         FROM stock_transaction st
         LEFT JOIN timber t ON t.timber_id = st.timber_id
         LEFT JOIN timber_type tt ON tt.type_id = t.type_id
         LEFT JOIN allocation_request ar ON ar.allocation_id = st.allocation_id
         LEFT JOIN worker w ON w.worker_id = ar.worker_id
         LEFT JOIN manager m ON m.manager_id = ar.manager_id
+        LEFT JOIN wastage ws ON ws.wastage_id = st.wastage_id
+        LEFT JOIN worker ws_w ON ws_w.worker_id = ws.worker_id
         ORDER BY st.txn_id DESC LIMIT 500
       `);
       return res.json(rows);
@@ -1044,9 +1048,10 @@ app.post(
         const wastageId = wasteRes.rows[0]?.wastage_id;
 
         // Record in stock_transaction (allocation_id is null for wastage transactions due to UNIQUE constraint)
+        const performer = req.user.name ? `${req.user.name} (Worker)` : "Worker";
         await client.query(
-          "INSERT INTO stock_transaction (txn_type, quantity, stock_after, txn_time, timber_id, wastage_id, allocation_id) VALUES ($1, $2, $3, NOW(), $4, $5, $6)",
-          ["Wastage", qty, newStock, resolvedTimberId, wastageId, null]
+          "INSERT INTO stock_transaction (txn_type, quantity, stock_after, txn_time, timber_id, wastage_id, allocation_id, performed_by) VALUES ($1, $2, $3, NOW(), $4, $5, $6, $7)",
+          ["Wastage", qty, newStock, resolvedTimberId, wastageId, null, performer]
         );
 
         // Check low stock triggers (FR9)
