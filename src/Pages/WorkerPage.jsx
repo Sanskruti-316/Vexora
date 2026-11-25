@@ -250,7 +250,11 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
                     <span className="opwho" style={{ marginRight: '15px' }}>
                         Worker: <strong>{name}</strong>
                     </span>
-                    <button className="opbtn" onClick={onsignout}>
+                    <button
+                        className="opbtn"
+                        style={{ color: 'white', backgroundColor: '#8a1f1f', cursor: 'pointer', fontWeight: 'bold' }}
+                        onClick={onsignout}
+                    >
                         Sign Out
                     </button>
                 </div>

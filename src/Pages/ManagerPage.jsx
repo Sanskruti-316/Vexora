@@ -210,7 +210,11 @@ export default function ManagerPage({ onsignout }) {
                     <span className="opwho" style={{ marginRight: '15px' }}>
                         Logged in as: <strong>Warehouse Manager</strong>
                     </span>
-                    <button className="op-btn" onClick={onsignout}>
+                    <button
+                        className="opbtn"
+                        style={{ color: 'white', backgroundColor: '#8a1f1f', cursor: 'pointer', fontWeight: 'bold' }}
+                        onClick={onsignout}
+                    >
                         Sign Out
                     </button>
                 </div>

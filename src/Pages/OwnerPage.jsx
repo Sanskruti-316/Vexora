@@ -168,7 +168,11 @@ export default function OwnerPage({ onsignout }) {
                     <span className="opwho" style={{ marginRight: '15px', color: '#555' }}>
                         Logged in as: <strong>Owner</strong>
                     </span>
-                    <button className="opbtn" style={{ color: 'white', backgroundColor: '#8a1f1f' }} onClick={onsignout}>
+                    <button
+                        className="opbtn"
+                        style={{ color: 'white', backgroundColor: '#8a1f1f', cursor: 'pointer', fontWeight: 'bold' }}
+                        onClick={onsignout}
+                    >
                         Sign Out
                     </button>
                 </div>
