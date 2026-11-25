@@ -178,8 +178,8 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
 
     const tabs = [
         ['inventory', 'Timber Stock'],
-        ['requests', 'Submit Requests (FR2)'],
-        ['wastage', 'Record Wastage (FR6)'],
+        ['requests', 'Submit Requests '],
+        ['wastage', 'Record Wastage '],
     ];
 
     return (
@@ -268,7 +268,7 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
                                     </select>
                                     <input
                                         type="number"
-                                        placeholder="Quantity needed (CFT)"
+                                        placeholder="Quantity needed "
                                         value={aQty}
                                         onChange={(e) => setAQty(e.target.value)}
                                         min="1"
@@ -287,21 +287,21 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
                                     </p>
                                     <input
                                         type="text"
-                                        placeholder="Species / Type (e.g. Teak, Sal)"
+                                        placeholder="Species / Type"
                                         value={nType}
                                         onChange={(e) => setNType(e.target.value)}
                                         required
                                     />
                                     <input
                                         type="text"
-                                        placeholder="Diameter x Length (e.g. 4x10 ft, 12x20 ft)"
+                                        placeholder="Diameter x Length "
                                         value={nSize}
                                         onChange={(e) => setNSize(e.target.value)}
                                         required
                                     />
                                     <input
                                         type="number"
-                                        placeholder="Quantity (CFT)"
+                                        placeholder="Quantity "
                                         value={nQty}
                                         onChange={(e) => setNQty(e.target.value)}
                                         min="1"
@@ -377,7 +377,7 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
                     {tab === 'wastage' && (
                         <div className="wastage-management-section">
                             <div className="ophead">
-                                <h2>Timber Wastage Management (FR6)</h2>
+                                <h2>Timber Wastage Management</h2>
                             </div>
 
                             {/* Section 1: Overview of What Was Allocated to this Worker */}
@@ -482,7 +482,7 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
                                         Log Wastage for Your Allocated Timber
                                     </h3>
                                     <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '20px' }}>
-                                        Specify the quantity lost from your allocated batch and state the cause of loss (e.g. knots, rot, splitting, miscut).
+                                        Specify the quantity lost from your allocated batch and state the cause of loss .
                                     </p>
                                     <form onSubmit={handleRecordWastage} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                                         <div>

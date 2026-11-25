@@ -135,11 +135,11 @@ export default function ManagerPage({ onsignout }) {
 
     const tabs = [
         ['inventory', 'Timber Stock'],
-        ['charts', 'Charts & Analytics (FR3)'],
+        ['charts', 'Charts & Analytics'],
         ['requests', `Requests (${pending.length})`],
-        ['workers', `Workers (${workers.length}) (FR8)`],
-        ['wastage', `Wastage Log (${wastageList.length}) (FR6)`],
-        ['txns', 'Transactions (FR5)'],
+        ['workers', `Workers (${workers.length})`],
+        ['wastage', `Wastage Log (${wastageList.length}) `],
+        ['txns', 'Transactions'],
     ];
 
     return (
@@ -245,7 +245,7 @@ export default function ManagerPage({ onsignout }) {
                     {tab === 'charts' && (
                         <div className="charts-section">
                             <div className="ophead">
-                                <h2>Manager Graphical Analytics & Charts (FR3)</h2>
+                                <h2>Manager Graphical Analytics & Charts </h2>
                                 <button className="rpbtn grey" onClick={loadAll} disabled={loading}>
                                     {loading ? 'Refreshing...' : 'Refresh Charts'}
                                 </button>
@@ -263,7 +263,7 @@ export default function ManagerPage({ onsignout }) {
                                 }}
                             >
                                 <h3 style={{ margin: '0 0 15px 0', color: '#1e293b' }}>
-                                    Available Stock Quantity by Timber Species (CFT)
+                                    Available Stock Quantity by Timber Species 
                                 </h3>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                                     {stockItems.length === 0 && <p className="opempty">No stock records found.</p>}
@@ -395,7 +395,7 @@ export default function ManagerPage({ onsignout }) {
                     {tab === 'requests' && (
                         <>
                             <div className="ophead">
-                                <h2>Worker Requests (FR2)</h2>
+                                <h2>Worker Requests</h2>
                             </div>
                             <div className="opscroll">
                                 <table>
@@ -464,7 +464,7 @@ export default function ManagerPage({ onsignout }) {
                     {tab === 'workers' && (
                         <>
                             <div className="ophead">
-                                <h2>Worker Account Management (FR8)</h2>
+                                <h2>Worker Account Management</h2>
                             </div>
                             <form className="rpform" onSubmit={handleAddWorker}>
                                 <input
@@ -483,7 +483,7 @@ export default function ManagerPage({ onsignout }) {
                                 />
                                 <input
                                     type="tel"
-                                    placeholder="Phone (optional)"
+                                    placeholder="Phone "
                                     value={wPhone}
                                     onChange={(e) => setWPhone(e.target.value)}
                                 />
@@ -518,9 +518,9 @@ export default function ManagerPage({ onsignout }) {
                                                 </td>
                                             </tr>
                                         )}
-                                        {workers.map((w) => (
+                                        {workers.map((w, idx) => (
                                             <tr key={w.id}>
-                                                <td>{w.id}</td>
+                                                <td>{idx + 1}</td>
                                                 <td>
                                                     <strong>{w.name}</strong>
                                                 </td>
@@ -549,7 +549,7 @@ export default function ManagerPage({ onsignout }) {
                     {tab === 'wastage' && (
                         <>
                             <div className="ophead">
-                                <h2>Recorded Timber Wastage & Scrap Logs (FR6)</h2>
+                                <h2>Recorded Timber Wastage & Scrap Logs</h2>
                             </div>
                             <div className="opscroll">
                                 <table>
@@ -595,7 +595,7 @@ export default function ManagerPage({ onsignout }) {
                     {tab === 'txns' && (
                         <>
                             <div className="ophead">
-                                <h2>Transaction History (FR5)</h2>
+                                <h2>Transaction History</h2>
                             </div>
                             <div className="opscroll">
                                 <table>
