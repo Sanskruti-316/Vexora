@@ -576,9 +576,9 @@ export default function ManagerPage({ onsignout }) {
                                                 </td>
                                             </tr>
                                         )}
-                                        {sortedWorkers.map((w) => (
+                                        {sortedWorkers.map((w, index) => (
                                             <tr key={w.id}>
-                                                <td>{w.id}</td>
+                                                <td>{index + 1}</td>
                                                 <td>
                                                     <strong>{w.name}</strong>
                                                 </td>

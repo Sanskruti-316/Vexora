@@ -1395,11 +1395,43 @@ const getManageableRoles = (actorRole) => {
   return [];
 };
 
+async function resequenceAccounts() {
+  if (!pool.hasEnterpriseSchema) return;
+  try {
+    // Resequence managers
+    const mgrs = await pool.query("SELECT manager_id FROM manager ORDER BY manager_id ASC");
+    for (let i = 0; i < mgrs.rows.length; i++) {
+      const desiredId = i + 1;
+      const currentId = Number(mgrs.rows[i].manager_id);
+      if (currentId !== desiredId) {
+        await pool.query("UPDATE manager SET manager_id = $1 WHERE manager_id = $2", [desiredId, currentId]);
+      }
+    }
+    const maxM = mgrs.rows.length;
+    await pool.query("SELECT setval('manager_manager_id_seq', GREATEST(1, $1::bigint), true)", [maxM]);
+
+    // Resequence workers
+    const wrks = await pool.query("SELECT worker_id FROM worker ORDER BY worker_id ASC");
+    for (let i = 0; i < wrks.rows.length; i++) {
+      const desiredId = i + 1;
+      const currentId = Number(wrks.rows[i].worker_id);
+      if (currentId !== desiredId) {
+        await pool.query("UPDATE worker SET worker_id = $1 WHERE worker_id = $2", [desiredId, currentId]);
+      }
+    }
+    const maxW = wrks.rows.length;
+    await pool.query("SELECT setval('worker_worker_id_seq', GREATEST(1, $1::bigint), true)", [maxW]);
+  } catch (err) {
+    console.error("Error resequencing accounts:", err.message);
+  }
+}
+
 // 1. List manageable users
 app.get(
   "/api/users",
   auth("owner", "manager"),
   h(async (req, res) => {
+    await resequenceAccounts();
     const allowedRoles = getManageableRoles(req.user.role);
     const placeholders = allowedRoles.map((_, i) => `$${i + 1}`).join(", ");
 
@@ -1594,6 +1626,7 @@ app.delete(
       } else if (target.role === "worker") {
         await pool.query("DELETE FROM worker WHERE worker_id = $1", [targetUserId]);
       }
+      await resequenceAccounts();
     } else {
       await pool.query("DELETE FROM users WHERE id = $1", [targetUserId]);
     }

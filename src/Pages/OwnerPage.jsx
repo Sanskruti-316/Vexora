@@ -654,9 +654,9 @@ export default function OwnerPage({ onsignout }) {
                                                 </td>
                                             </tr>
                                         )}
-                                        {managers.map((m) => (
+                                        {managers.map((m, index) => (
                                             <tr key={m.id}>
-                                                <td>{m.id}</td>
+                                                <td>{index + 1}</td>
                                                 <td>
                                                     <strong>{m.name}</strong>
                                                 </td>
@@ -707,9 +707,9 @@ export default function OwnerPage({ onsignout }) {
                                                 </td>
                                             </tr>
                                         )}
-                                        {workers.map((w) => (
+                                        {workers.map((w, index) => (
                                             <tr key={w.id}>
-                                                <td>{w.id}</td>
+                                                <td>{index + 1}</td>
                                                 <td>
                                                     <strong>{w.name}</strong>
                                                 </td>
