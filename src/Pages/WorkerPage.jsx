@@ -10,7 +10,7 @@ const formatDim = (s) => {
 };
 
 export default function WorkerPage({ onsignout, name = 'Worker' }) {
-    const [tab, setTab] = useState('inventory'); // 'inventory' | 'requests' | 'wastage' (FR6)
+    const [tab, setTab] = useState('inventory');
     const [timber, setTimber] = useState([]);
     const [requests, setRequests] = useState([]);
     const [myAllocations, setMyAllocations] = useState([]);
@@ -26,7 +26,7 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
     const [nQty, setNQty] = useState('');
     const [nPrice, setNPrice] = useState('');
 
-    // FR6: Wastage form state (based on what the worker was allocated)
+    // Wastage form state
     const [selectedAllocId, setSelectedAllocId] = useState('');
     const [wQty, setWQty] = useState('');
     const [wWhy, setWWhy] = useState('');
@@ -58,7 +58,7 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
         loadData();
     }, []);
 
-    // FR2: Worker sends allocation request
+    // Worker sends allocation request
     const sendAllocation = async (e) => {
         e.preventDefault();
         if (submittingReq) return;
@@ -92,7 +92,7 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
         }
     };
 
-    // FR2: Worker sends add timber request
+    // Worker sends add timber request
     const sendAdd = async (e) => {
         e.preventDefault();
         if (submittingReq) return;
@@ -146,9 +146,7 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
         }
     };
 
-    // =========================================================================
-    // FR6: WORKER RECORDS WASTAGE FOR TIMBER ALLOCATED TO THEM
-    // =========================================================================
+    // Worker records wastage for timber allocated to them
     const selectedAllocation = myAllocations.find(
         (a) => String(a.allocation_id || a.id) === String(selectedAllocId)
     );
@@ -271,7 +269,7 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
                 </aside>
 
                 <div className="opcontent">
-                    {/* Navigation Tabs including FR6 Record Wastage */}
+                    {/* Navigation Tabs */}
                     <div className="rptabs" style={{ marginBottom: '20px' }}>
                         {tabs.map(([k, label]) => (
                             <button
@@ -306,7 +304,7 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
                     {/* Inventory Tab */}
                     {tab === 'inventory' && <InventoryTable timber={timber} />}
 
-                    {/* Requests Tab (FR2) */}
+                    {/* Requests Tab */}
                     {tab === 'requests' && (
                         <>
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px', marginBottom: '30px' }}>
@@ -431,9 +429,7 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
                         </>
                     )}
 
-                    {/* ========================================================================= */}
-                    {/* FR6: WORKERS RECORD AND ACCOUNT FOR WASTAGE FOR TIMBER ALLOCATED TO THEM */}
-                    {/* ========================================================================= */}
+                    {/* Wastage Tab */}
                     {tab === 'wastage' && (
                         <div className="wastage-management-section">
                             <div className="ophead">

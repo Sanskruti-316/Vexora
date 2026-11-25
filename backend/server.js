@@ -108,10 +108,6 @@ async function tx(fn) {
   }
 }
 
-/**
- * FR9: Automated Low-Stock Alert System
- * Detects any timber where qty < min and creates/updates notifications.
- */
 export async function checkLow(db = pool) {
   try {
     if (pool.hasEnterpriseSchema) {
@@ -175,7 +171,7 @@ export async function checkLow(db = pool) {
   }
 }
 
-// Background cron interval to monitor stock levels every 60 seconds (FR9)
+// Monitor stock levels periodically
 setInterval(() => checkLow().catch(console.error), 60000);
 
 // ==========================================
@@ -185,11 +181,7 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
-// ==========================================
-// FR1: AUTHENTICATION & LOGIN
-// The system shall allow users to log in using their registered
-// credentials through a web interface and provide a role-specific dashboard.
-// ==========================================
+// Authentication and Login
 const handleLogin = async (req, res) => {
   const email = String(req.body.email || "").toLowerCase().trim();
   const password = String(req.body.password || "").trim();
@@ -289,11 +281,7 @@ app.get("/api/auth/me", auth(), (req, res) => {
   res.json({ user: req.user });
 });
 
-// ==========================================
-// FR3: INVENTORY STATISTICS & DASHBOARD
-// The system shall provide a dashboard displaying inventory statistics
-// using charts and graphical representations.
-// ==========================================
+// Inventory Statistics and Dashboard Analytics
 app.get(
   "/api/dashboard",
   auth("owner", "manager", "worker"),
@@ -399,13 +387,7 @@ app.get(
   })
 );
 
-// ==========================================
-// FR4: TIMBER SEARCH, VIEW, SORT, AND FILTER
-// The system shall allow workers and managers to search, view, sort,
-// and filter timber stock based on attributes such as type, quantity,
-// price, availability, size, and date added.
-// ==========================================
-// Helper to fetch all raw timber records from Supabase / Database
+// Timber query and search pipeline
 async function fetchAllTimberRecords() {
   if (pool.hasEnterpriseSchema) {
     const { rows } = await pool.query(`
@@ -422,16 +404,6 @@ async function fetchAllTimberRecords() {
   }
 }
 
-/**
- * FR4: Main Timber Query Pipeline
- * Executes the complete Main Algorithm:
- * 1. Retrieve timber records from Supabase.
- * 2. Check operation selected by user.
- * 3. Searching -> Binary Search algorithm (O(log n)).
- * 4. Filtering -> Linear Filtering algorithm (O(n)).
- * 5. Sorting -> Merge Sort algorithm (O(n log n)).
- * 6. Return results or "No Records Found".
- */
 app.get(
   "/api/timber",
   auth("worker", "manager", "owner"),
@@ -557,11 +529,7 @@ app.patch(
   })
 );
 
-// ==========================================
-// FR2: REQUESTS & ALLOCATIONS
-// The system shall allow the manager to accept the add timber req
-// and allocate stored timber to workers.
-// ==========================================
+// Requests and Allocations
 // 1. Submit request (Worker)
 app.post(
   "/api/requests",
@@ -899,7 +867,7 @@ app.post(
         }
       }
 
-      // Check low stock triggers (FR9)
+      // Check low stock triggers
       await checkLow(client);
     });
 
@@ -956,11 +924,7 @@ app.post(
   })
 );
 
-// ==========================================
-// FR5: TRANSACTION HISTORY
-// The system shall allow the manager and owner to view
-// the transaction history of timber.
-// ==========================================
+// Transaction History
 app.get(
   "/api/txns",
   auth("manager", "owner"),
@@ -1098,13 +1062,8 @@ app.post(
   })
 );
 
-// ==========================================
-// FR6: TIMBER WASTAGE MANAGEMENT
-// The system shall allow workers to record and account for timber wastage
-// specifically for timber that was allocated to them.
-// ==========================================
-
-// Worker fetches timber allocated to them (FR6)
+// Timber Wastage Management
+// Worker fetches timber allocated to them
 app.get(
   "/api/allocations/mine",
   auth("worker", "manager", "owner"),
@@ -1261,7 +1220,7 @@ app.post(
           ["Wastage", qty, newStock, resolvedTimberId, wastageId, null, performer]
         );
 
-        // Check low stock triggers (FR9)
+        // Check low stock triggers
         await checkLow(client);
       } else {
         // Standard Schema
@@ -1291,13 +1250,13 @@ app.post(
           [timber_id, req.user.id, qty, reason || "Unspecified"]
         );
 
-        // Record in general transactions (FR5)
+        // Record in general transactions
         await client.query(
           "INSERT INTO txns (date, kind, type, qty, done_by) VALUES (date('now'), $1, $2, $3, $4)",
           [`Wastage${reason ? ` - ${reason}` : ""}`, timber.type, qty, req.user.name]
         );
 
-        // Check if this deduction causes stock to fall below minimum threshold (FR9)
+        // Check if this deduction causes stock to fall below minimum threshold
         await checkLow(client);
       }
     });
@@ -1387,11 +1346,7 @@ app.get(
   })
 );
 
-// ==========================================
-// FR7 & FR8: USER MANAGEMENT
-// FR7: The system shall allow the owner to add and delete manager and worker accounts.
-// FR8: The system shall allow the manager to add and remove worker accounts.
-// ==========================================
+// User Management
 const getManageableRoles = (actorRole) => {
   if (actorRole === "owner") return ["manager", "worker"];
   if (actorRole === "manager") return ["worker"];
@@ -1638,11 +1593,7 @@ app.delete(
   })
 );
 
-// ==========================================
-// FR9: MINIMUM STOCK LEVEL NOTIFICATIONS
-// The system shall notify the manager when the quantity of a timber
-// type falls below its minimum stock level.
-// ==========================================
+// Stock Notifications
 app.get(
   "/api/notifications",
   auth("manager", "owner"),

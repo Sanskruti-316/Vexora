@@ -28,7 +28,7 @@ export default function OwnerPage({ onsignout }) {
     const [loading, setLoading] = useState(false);
     const [msg, setMsg] = useState({ text: '', type: '' });
 
-    // FR7: Add User Form state
+    // Add User Form state
     const [uName, setUName] = useState('');
     const [uEmail, setUEmail] = useState('');
     const [uPhone, setUPhone] = useState('');
@@ -61,7 +61,7 @@ export default function OwnerPage({ onsignout }) {
         loadAllData();
     }, []);
 
-    // FR7: Owner creates a manager or worker account
+    // Owner creates a manager or worker account
     const handleAddUser = async (e) => {
         e.preventDefault();
         setMsg({ text: '', type: '' });
@@ -126,7 +126,7 @@ export default function OwnerPage({ onsignout }) {
         }
     };
 
-    // FR7: Owner deletes a manager or worker account
+    // Owner deletes a manager or worker account
     const handleDeleteUser = async (userId, userName, role) => {
         if (!window.confirm(`Are you sure you want to delete ${role} '${userName}'?`)) return;
         try {
@@ -141,7 +141,7 @@ export default function OwnerPage({ onsignout }) {
     const managers = users.filter((u) => u.role === 'manager').sort((a, b) => Number(a.id) - Number(b.id));
     const workers = users.filter((u) => u.role === 'worker').sort((a, b) => Number(a.id) - Number(b.id));
 
-    // Chart calculations for FR3 - group all dimensions of each timber type together into one item
+    // Chart calculations
     const rawStockSource = (stats?.stockByType && stats.stockByType.length > 0) ? stats.stockByType : timber;
     const stockItems = consolidateStockByType(rawStockSource);
     const totalQty = stockItems.reduce((acc, s) => acc + Number(s.qty || 0), 0);
@@ -244,7 +244,7 @@ export default function OwnerPage({ onsignout }) {
                         </div>
                     )}
 
-                    {/* FR3: DASHBOARD DISPLAYING INVENTORY STATISTICS USING CHARTS */}
+                    {/* Charts Tab */}
                     {tab === 'analytics' && (
                         <div className="analytics-section">
                             <div className="ophead">
@@ -397,7 +397,7 @@ export default function OwnerPage({ onsignout }) {
                     {/* Timber Stock Tab */}
                     {tab === 'inventory' && <InventoryTable timber={timber} />}
 
-                    {/* FR7: THE SYSTEM SHALL ALLOW THE OWNER TO ADD AND DELETE ACCOUNTS */}
+                    {/* Users Management Tab */}
                     {tab === 'users' && (
                         <div className="users-management-section">
                             <div className="ophead">

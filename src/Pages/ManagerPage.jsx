@@ -27,7 +27,7 @@ const consolidateStockByType = (items = []) => {
 };
 
 export default function ManagerPage({ onsignout }) {
-    const [tab, setTab] = useState('inventory'); // 'inventory' | 'charts' (FR3) | 'requests' (FR2) | 'workers' (FR8) | 'wastage' (FR6) | 'txns' (FR5)
+    const [tab, setTab] = useState('inventory');
     const [timber, setTimber] = useState([]);
     const [requests, setRequests] = useState([]);
     const [workers, setWorkers] = useState([]);
@@ -38,7 +38,7 @@ export default function ManagerPage({ onsignout }) {
     const [msg, setMsg] = useState({ text: '', type: '' });
     const [loading, setLoading] = useState(false);
 
-    // FR8: Add Worker state
+    // Add Worker state
     const [wName, setWName] = useState('');
     const [wEmail, setWEmail] = useState('');
     const [wPhone, setWPhone] = useState('');
@@ -75,7 +75,7 @@ export default function ManagerPage({ onsignout }) {
         loadAll();
     }, []);
 
-    // FR2: Manager accepts a worker request (allocate or add)
+    // Manager accepts a worker request (allocate or add)
     const handleAccept = async (reqItem) => {
         setMsg({ text: '', type: '' });
         try {
@@ -93,7 +93,7 @@ export default function ManagerPage({ onsignout }) {
         }
     };
 
-    // FR2: Manager rejects a request
+    // Manager rejects a request
     const handleReject = async (reqItemOrId) => {
         setMsg({ text: '', type: '' });
         const isObj = reqItemOrId && typeof reqItemOrId === 'object';
@@ -113,7 +113,7 @@ export default function ManagerPage({ onsignout }) {
         }
     };
 
-    // FR8: Manager adds a worker account
+    // Manager adds a worker account
     const handleAddWorker = async (e) => {
         e.preventDefault();
         setMsg({ text: '', type: '' });
@@ -164,7 +164,7 @@ export default function ManagerPage({ onsignout }) {
         }
     };
 
-    // FR8: Manager removes a worker account
+    // Manager removes a worker account
     const handleRemoveWorker = async (workerId, workerName) => {
         if (!window.confirm(`Are you sure you want to remove worker '${workerName}'?`)) return;
         try {
@@ -176,11 +176,11 @@ export default function ManagerPage({ onsignout }) {
         }
     };
 
-    // Low stock items (FR9)
+    // Low stock items
     const low = timber.filter((t) => Number(t.qty ?? t.quantity ?? 0) <= Number(t.min ?? t.min_stock_level ?? 10));
     const pending = requests.filter((r) => String(r.status).toUpperCase() === 'PENDING');
 
-    // Chart calculations for FR3 - group all dimensions of each timber type together into one item
+    // Chart calculations
     const rawStockSource = (stats?.stockByType && stats.stockByType.length > 0) ? stats.stockByType : timber;
     const stockItems = consolidateStockByType(rawStockSource);
     const totalQty = stockItems.reduce((acc, s) => acc + Number(s.qty || 0), 0);
@@ -252,7 +252,7 @@ export default function ManagerPage({ onsignout }) {
                 </aside>
 
                 <div className="opcontent">
-                    {/* FR9 Low Stock Notification Banner */}
+                    {/* Low Stock Notification Banner */}
                     {low.length > 0 && (
                         <div className="rpalert" style={{ marginBottom: '15px' }}>
                             <strong>Low Stock Warning:</strong>{' '}
@@ -297,9 +297,7 @@ export default function ManagerPage({ onsignout }) {
                     {/* Timber Inventory Tab */}
                     {tab === 'inventory' && <InventoryTable timber={timber} />}
 
-                    {/* ========================================================================= */}
-                    {/* FR3: DASHBOARD DISPLAYING INVENTORY STATISTICS USING CHARTS              */}
-                    {/* ========================================================================= */}
+                    {/* Charts Tab */}
                     {tab === 'charts' && (
                         <div className="charts-section">
                             <div className="ophead">
@@ -449,7 +447,7 @@ export default function ManagerPage({ onsignout }) {
                         </div>
                     )}
 
-                    {/* Requests Tab (FR2) */}
+                    {/* Requests Tab */}
                     {tab === 'requests' && (
                         <>
                             <div className="ophead">
@@ -518,7 +516,7 @@ export default function ManagerPage({ onsignout }) {
                         </>
                     )}
 
-                    {/* Workers Management Tab (FR8) */}
+                    {/* Workers Management Tab */}
                     {tab === 'workers' && (
                         <>
                             <div className="ophead">
@@ -605,9 +603,7 @@ export default function ManagerPage({ onsignout }) {
                         </>
                     )}
 
-                    {/* ========================================================================= */}
-                    {/* FR6: TIMBER WASTAGE LOG (MANAGER VIEW)                                    */}
-                    {/* ========================================================================= */}
+                    {/* Wastage Log Tab */}
                     {tab === 'wastage' && (
                         <>
                             <div className="ophead">
@@ -653,7 +649,7 @@ export default function ManagerPage({ onsignout }) {
                         </>
                     )}
 
-                    {/* Transaction History Tab (FR5) */}
+                    {/* Transaction History Tab */}
                     {tab === 'txns' && (
                         <>
                             <div className="ophead">
