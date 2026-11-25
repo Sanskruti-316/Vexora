@@ -25,15 +25,15 @@ export default function InventoryTable({ timber = [] }) {
                 <div className="rptools">
                     <select value={avail} onChange={(e) => setAvail(e.target.value)}>
                         <option value="all">All Stock</option>
-                        <option value="in">In Stock (Linear Filter)</option>
-                        <option value="low">Low Stock (Linear Filter)</option>
-                        <option value="out">Out of Stock (Linear Filter)</option>
+                        <option value="in">In Stock </option>
+                        <option value="low">Low Stock </option>
+                        <option value="out">Out of Stock</option>
                     </select>
                     <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
-                        <option value="type">Sort: Type (Merge Sort)</option>
-                        <option value="qty">Sort: Quantity (Merge Sort)</option>
-                        <option value="price">Sort: Price (Merge Sort)</option>
-                        <option value="date">Sort: Date added (Merge Sort)</option>
+                        <option value="type">Sort: Type </option>
+                        <option value="qty">Sort: Quantity </option>
+                        <option value="price">Sort: Price </option>
+                        <option value="date">Sort: Date added </option>
                     </select>
                     <select value={sortOrder} onChange={(e) => setSortOrder(e.target.value)}>
                         <option value="ASC">Order: Ascending</option>
@@ -41,7 +41,7 @@ export default function InventoryTable({ timber = [] }) {
                     </select>
                     <input
                         type="text"
-                        placeholder="Search timber (e.g. Teak, 20x47)..."
+                        placeholder="Search timber"
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
                     />
@@ -74,8 +74,8 @@ export default function InventoryTable({ timber = [] }) {
                                 <td>{t.date ? String(t.date).slice(0, 10) : 'N/A'}</td>
                                 <td>
                                     {(t.qty ?? t.quantity) === 0 ? <span className="rptag bad">Out</span>
-                                    : (t.qty ?? t.quantity) <= (t.min ?? t.min_stock_level ?? 10) ? <span className="rptag warn">Low</span>
-                                    : <span className="rptag ok">In stock</span>}
+                                        : (t.qty ?? t.quantity) <= (t.min ?? t.min_stock_level ?? 10) ? <span className="rptag warn">Low</span>
+                                            : <span className="rptag ok">In stock</span>}
                                 </td>
                             </tr>
                         ))}

@@ -466,13 +466,14 @@ export default function ManagerPage({ onsignout }) {
                             <div className="ophead">
                                 <h2>Worker Account Management</h2>
                             </div>
-                            <form className="rpform" onSubmit={handleAddWorker}>
+                            <form className="rpform" onSubmit={handleAddWorker} autoComplete="off">
                                 <input
                                     type="text"
                                     placeholder="Worker Name"
                                     value={wName}
                                     onChange={(e) => setWName(e.target.value)}
                                     required
+                                    autoComplete="off"
                                 />
                                 <input
                                     type="email"
@@ -480,12 +481,14 @@ export default function ManagerPage({ onsignout }) {
                                     value={wEmail}
                                     onChange={(e) => setWEmail(e.target.value)}
                                     required
+                                    autoComplete="off"
                                 />
                                 <input
                                     type="tel"
-                                    placeholder="Phone "
+                                    placeholder="Phone Number"
                                     value={wPhone}
                                     onChange={(e) => setWPhone(e.target.value)}
+                                    autoComplete="off"
                                 />
                                 <input
                                     type="password"
@@ -494,6 +497,7 @@ export default function ManagerPage({ onsignout }) {
                                     onChange={(e) => setWPassword(e.target.value)}
                                     required
                                     minLength={6}
+                                    autoComplete="new-password"
                                 />
                                 <button className="rpbtn" type="submit">
                                     Add Worker

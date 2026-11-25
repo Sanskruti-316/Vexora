@@ -363,36 +363,48 @@ export default function OwnerPage({ onsignout }) {
                                     background: '#ffffff',
                                     border: '1px solid #e2e8f0',
                                     borderRadius: '8px',
-                                    padding: '20px',
+                                    padding: '24px',
                                     marginBottom: '30px',
                                     boxShadow: '0 2px 4px rgba(0,0,0,0.04)',
                                 }}
                             >
-                                <h3 style={{ margin: '0 0 15px 0', color: '#1e293b' }}>Add Manager or Worker Account</h3>
+                                <h3 style={{ margin: '0 0 18px 0', color: '#1e293b', fontSize: '18px', fontWeight: '700' }}>
+                                    Add Manager or Worker Account
+                                </h3>
                                 <form
                                     onSubmit={handleAddUser}
+                                    autoComplete="off"
                                     style={{
                                         display: 'grid',
-                                        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                                        gap: '12px',
+                                        gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+                                        gap: '16px',
                                         alignItems: 'end',
                                     }}
                                 >
                                     <div>
-                                        <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '4px' }}>
+                                        <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '6px', color: '#334155' }}>
                                             Role
                                         </label>
                                         <select
                                             value={uRole}
                                             onChange={(e) => setURole(e.target.value)}
-                                            style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #cbd5e1' }}
+                                            style={{
+                                                width: '100%',
+                                                height: '40px',
+                                                padding: '0 12px',
+                                                borderRadius: '6px',
+                                                border: '1px solid #cbd5e1',
+                                                fontSize: '14px',
+                                                boxSizing: 'border-box',
+                                                backgroundColor: '#fff',
+                                            }}
                                         >
                                             <option value="manager">Warehouse Manager</option>
                                             <option value="worker">Mill Worker</option>
                                         </select>
                                     </div>
                                     <div>
-                                        <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '4px' }}>
+                                        <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '6px', color: '#334155' }}>
                                             Full Name
                                         </label>
                                         <input
@@ -401,12 +413,21 @@ export default function OwnerPage({ onsignout }) {
                                             value={uName}
                                             onChange={(e) => setUName(e.target.value)}
                                             required
-                                            style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #cbd5e1' }}
+                                            autoComplete="off"
+                                            style={{
+                                                width: '100%',
+                                                height: '40px',
+                                                padding: '0 12px',
+                                                borderRadius: '6px',
+                                                border: '1px solid #cbd5e1',
+                                                fontSize: '14px',
+                                                boxSizing: 'border-box',
+                                            }}
                                         />
                                     </div>
-                                    {uRole === 'manager' && (
+                                    {uRole === 'manager' ? (
                                         <div>
-                                            <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '4px' }}>
+                                            <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '6px', color: '#334155' }}>
                                                 Belonging Warehouse
                                             </label>
                                             <input
@@ -415,12 +436,44 @@ export default function OwnerPage({ onsignout }) {
                                                 value={uWarehouse}
                                                 onChange={(e) => setUWarehouse(e.target.value)}
                                                 required
-                                                style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #cbd5e1' }}
+                                                autoComplete="off"
+                                                style={{
+                                                    width: '100%',
+                                                    height: '40px',
+                                                    padding: '0 12px',
+                                                    borderRadius: '6px',
+                                                    border: '1px solid #cbd5e1',
+                                                    fontSize: '14px',
+                                                    boxSizing: 'border-box',
+                                                }}
+                                            />
+                                        </div>
+                                    ) : (
+                                        <div>
+                                            <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '6px', color: '#94a3b8' }}>
+                                                Belonging Warehouse
+                                            </label>
+                                            <input
+                                                type="text"
+                                                placeholder="Not applicable for worker"
+                                                disabled
+                                                style={{
+                                                    width: '100%',
+                                                    height: '40px',
+                                                    padding: '0 12px',
+                                                    borderRadius: '6px',
+                                                    border: '1px solid #e2e8f0',
+                                                    backgroundColor: '#f8fafc',
+                                                    color: '#94a3b8',
+                                                    fontSize: '14px',
+                                                    boxSizing: 'border-box',
+                                                    cursor: 'not-allowed',
+                                                }}
                                             />
                                         </div>
                                     )}
                                     <div>
-                                        <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '4px' }}>
+                                        <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '6px', color: '#334155' }}>
                                             Email Address
                                         </label>
                                         <input
@@ -429,11 +482,20 @@ export default function OwnerPage({ onsignout }) {
                                             value={uEmail}
                                             onChange={(e) => setUEmail(e.target.value)}
                                             required
-                                            style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #cbd5e1' }}
+                                            autoComplete="off"
+                                            style={{
+                                                width: '100%',
+                                                height: '40px',
+                                                padding: '0 12px',
+                                                borderRadius: '6px',
+                                                border: '1px solid #cbd5e1',
+                                                fontSize: '14px',
+                                                boxSizing: 'border-box',
+                                            }}
                                         />
                                     </div>
                                     <div>
-                                        <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '4px' }}>
+                                        <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '6px', color: '#334155' }}>
                                             Phone Number
                                         </label>
                                         <input
@@ -441,11 +503,20 @@ export default function OwnerPage({ onsignout }) {
                                             placeholder="+91 9876543210"
                                             value={uPhone}
                                             onChange={(e) => setUPhone(e.target.value)}
-                                            style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #cbd5e1' }}
+                                            autoComplete="off"
+                                            style={{
+                                                width: '100%',
+                                                height: '40px',
+                                                padding: '0 12px',
+                                                borderRadius: '6px',
+                                                border: '1px solid #cbd5e1',
+                                                fontSize: '14px',
+                                                boxSizing: 'border-box',
+                                            }}
                                         />
                                     </div>
                                     <div>
-                                        <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '4px' }}>
+                                        <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '6px', color: '#334155' }}>
                                             Password (min 6 chars)
                                         </label>
                                         <input
@@ -454,11 +525,34 @@ export default function OwnerPage({ onsignout }) {
                                             value={uPassword}
                                             onChange={(e) => setUPassword(e.target.value)}
                                             required
-                                            style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #cbd5e1' }}
+                                            autoComplete="new-password"
+                                            style={{
+                                                width: '100%',
+                                                height: '40px',
+                                                padding: '0 12px',
+                                                borderRadius: '6px',
+                                                border: '1px solid #cbd5e1',
+                                                fontSize: '14px',
+                                                boxSizing: 'border-box',
+                                            }}
                                         />
                                     </div>
-                                    <div>
-                                        <button className="rpbtn" type="submit" style={{ width: '100%', padding: '9px 16px' }}>
+                                    <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
+                                        <button
+                                            className="rpbtn"
+                                            type="submit"
+                                            style={{
+                                                height: '40px',
+                                                padding: '0 28px',
+                                                backgroundColor: '#8a1f1f',
+                                                color: '#ffffff',
+                                                fontWeight: '600',
+                                                fontSize: '14px',
+                                                borderRadius: '6px',
+                                                border: 'none',
+                                                cursor: 'pointer',
+                                            }}
+                                        >
                                             Create Account
                                         </button>
                                     </div>

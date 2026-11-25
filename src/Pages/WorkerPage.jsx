@@ -67,7 +67,10 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
 
         try {
             await api.requestAllocation(t.id || t.timber_id, qty);
-            setMsg({ text: `Allocation request for ${qty} units of ${t.type || t.type_name} submitted successfully!`, type: 'success' });
+            setMsg({
+                text: `Allocation request for ${qty} units of ${t.type || t.type_name} submitted successfully!`,
+                type: 'success',
+            });
             setAId('');
             setAQty('');
             const rData = await api.getRequests();
@@ -259,10 +262,10 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
                                         Request timber pieces from storage for assigned mill tasks. Once approved by the manager, you can log wastage for it.
                                     </p>
                                     <select value={aId} onChange={(e) => setAId(e.target.value)} required>
-                                        <option value="">-- Select timber in stock --</option>
+                                        <option value="">Select timber in stock</option>
                                         {timber.map((t) => (
                                             <option key={t.id || t.timber_id} value={t.id || t.timber_id}>
-                                                {t.type || t.type_name} ({t.size}) — Available: {t.qty ?? t.quantity}
+                                                {t.type || t.type_name} ({t.size}) : Available: {t.qty ?? t.quantity}
                                             </option>
                                         ))}
                                     </select>
