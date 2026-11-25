@@ -853,17 +853,20 @@ app.post(
           );
           let timberId;
           let newStock;
+          const addQty = parseFloat(reqItem.qty) || 0;
+          const reqPrice = parseFloat(reqItem.price) || 0;
           if (existing.rows.length > 0) {
             timberId = existing.rows[0].timber_id;
-            newStock = existing.rows[0].quantity + reqItem.qty;
-            await client.query("UPDATE timber SET quantity = $1, price = $2 WHERE timber_id = $3", [newStock, reqItem.price, timberId]);
+            const currentQty = parseFloat(existing.rows[0].quantity) || 0;
+            newStock = currentQty + addQty;
+            await client.query("UPDATE timber SET quantity = quantity + $1, price = $2 WHERE timber_id = $3", [addQty, reqPrice, timberId]);
           } else {
             const insRes = await client.query(
               "INSERT INTO timber (timber_code, thickness, width, length, unit, quantity, price, location, date_added, type_id, request_id) VALUES ('T_NEW', $1, $1, $2, 'ft', $3, $4, 'Warehouse A', NOW(), $5, $6) RETURNING timber_id",
-              [diam, len, reqItem.qty, reqItem.price, typeId, rawId]
+              [diam, len, addQty, reqPrice, typeId, rawId]
             );
             timberId = insRes.rows[0].timber_id;
-            newStock = reqItem.qty;
+            newStock = addQty;
           }
           await client.query("UPDATE add_timber_request SET status = 'Approved', decided_at = NOW() WHERE request_id = $1", [rawId]);
           const performer = reqItem.worker_name ? `${reqItem.worker_name} (Worker)` : (req.user.name ? `${req.user.name} (Manager)` : "Manager");
