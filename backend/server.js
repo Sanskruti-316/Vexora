@@ -1142,6 +1142,15 @@ app.post(
   h(async (req, res) => {
     const qty = posFloat(req.body.qty, "Wastage length in ft must be greater than 0");
     const reason = String(req.body.reason || "").trim();
+    if (!reason) {
+      throw new Error("Reason for wastage is required");
+    }
+    if (/^\d+$/.test(reason)) {
+      throw new Error("Reason must be text only. Numeric values are not allowed.");
+    }
+    if (!/^[a-zA-Z][a-zA-Z0-9\s,.'\-\/]{1,199}$/.test(reason) || /^\d/.test(reason) || !/[a-zA-Z]{2,}/.test(reason)) {
+      throw new Error("Reason must be descriptive text only (e.g. End grain split, deep rot, knots, saw blade defect)");
+    }
     const allocation_id = req.body.allocation_id ? Number(req.body.allocation_id) : null;
     let timber_id = req.body.timber_id ? Number(req.body.timber_id) : null;
 

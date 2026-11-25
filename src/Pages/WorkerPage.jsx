@@ -164,6 +164,16 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
         const qty = parseFloat(wQty);
         const reason = wWhy.trim();
 
+        if (!reason) {
+            return setMsg({ text: 'Reason for scrap / wastage is required', type: 'error' });
+        }
+        if (/^\d+$/.test(reason)) {
+            return setMsg({ text: 'Reason must be text only. Numeric values are not allowed.', type: 'error' });
+        }
+        if (!/^[a-zA-Z][a-zA-Z0-9\s,.'\-\/]{1,199}$/.test(reason) || /^\d/.test(reason) || !/[a-zA-Z]{2,}/.test(reason)) {
+            return setMsg({ text: 'Reason must be descriptive text only (e.g. End grain split, deep rot, knots, saw blade defect)', type: 'error' });
+        }
+
         if (Number(selectedAllocation.wasted_qty || 0) > 0) {
             return setMsg({
                 text: `Wastage has already been recorded for this allocated wood (Allocation #${selectedAllocation.allocation_id || selectedAllocation.id}). A worker cannot allot wastage for a certain wood more than once.`,
@@ -600,7 +610,7 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
                                             </label>
                                             <input
                                                 type="text"
-                                                placeholder=""
+                                                placeholder="e.g. End grain split, deep rot, knots, saw blade defect"
                                                 value={wWhy}
                                                 onChange={(e) => setWWhy(e.target.value)}
                                                 required
