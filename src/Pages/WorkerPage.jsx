@@ -24,6 +24,7 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
     const [wQty, setWQty] = useState('');
     const [wWhy, setWWhy] = useState('');
     const [submittingWastage, setSubmittingWastage] = useState(false);
+    const [submittingReq, setSubmittingReq] = useState(false);
 
     // Load data from live backend
     const loadData = async () => {
@@ -53,6 +54,7 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
     // FR2: Worker sends allocation request
     const sendAllocation = async (e) => {
         e.preventDefault();
+        if (submittingReq) return;
         setMsg({ text: '', type: '' });
         const t = timber.find((x) => String(x.id || x.timber_id) === String(aId));
         const qty = Number(aQty);
@@ -65,6 +67,7 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
             return setMsg({ text: `Requested quantity (${qty}) exceeds available stock (${availableQty})`, type: 'error' });
         }
 
+        setSubmittingReq(true);
         try {
             await api.requestAllocation(t.id || t.timber_id, qty);
             setMsg({
@@ -77,23 +80,51 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
             setRequests(rData);
         } catch (err) {
             setMsg({ text: err.message || 'Failed to submit allocation request', type: 'error' });
+        } finally {
+            setSubmittingReq(false);
         }
     };
 
     // FR2: Worker sends add timber request
     const sendAdd = async (e) => {
         e.preventDefault();
+        if (submittingReq) return;
         setMsg({ text: '', type: '' });
-        const qty = Number(nQty);
-        const price = Number(nPrice);
 
-        if (!nType.trim() || !nSize.trim() || qty <= 0 || price <= 0) {
-            return setMsg({ text: 'Fill all fields with valid positive values', type: 'error' });
+        const cleanType = nType.trim();
+        if (!cleanType) {
+            return setMsg({ text: 'Timber species name is required', type: 'error' });
+        }
+        if (/^\d+$/.test(cleanType)) {
+            return setMsg({ text: 'Timber species cannot be numeric. Enter a valid wood name (e.g. Teak, Rosewood, Pine, Oak, Cedar)', type: 'error' });
+        }
+        if (!/^[a-zA-Z][a-zA-Z0-9\s\-]{1,49}$/.test(cleanType)) {
+            return setMsg({ text: 'Timber species must start with a letter and be at least 2 characters (e.g. Teak, Rosewood)', type: 'error' });
         }
 
+        const sizeMatch = nSize.trim().match(/^(\d+(?:\.\d+)?)\s*[xX*]\s*(\d+(?:\.\d+)?)(?:\s*(?:ft|in|m)?)?$/);
+        if (!sizeMatch) {
+            return setMsg({ text: 'Dimensions must be formatted as positive Diameter x Length (e.g. 4x10 or 12x32)', type: 'error' });
+        }
+        const diam = parseFloat(sizeMatch[1]);
+        const len = parseFloat(sizeMatch[2]);
+        if (isNaN(diam) || isNaN(len) || diam <= 0 || len <= 0) {
+            return setMsg({ text: 'Dimensions must be positive numbers greater than 0', type: 'error' });
+        }
+
+        const qty = parseInt(nQty, 10);
+        const price = parseFloat(nPrice);
+        if (isNaN(qty) || qty <= 0) {
+            return setMsg({ text: 'Quantity must be a positive integer greater than 0', type: 'error' });
+        }
+        if (isNaN(price) || price <= 0) {
+            return setMsg({ text: 'Unit price must be greater than 0', type: 'error' });
+        }
+
+        setSubmittingReq(true);
         try {
-            await api.requestAddTimber({ type: nType.trim(), size: nSize.trim(), qty, price });
-            setMsg({ text: `Request to add ${qty} units of ${nType.trim()} submitted!`, type: 'success' });
+            await api.requestAddTimber({ type: cleanType, size: `${diam}x${len}`, qty, price });
+            setMsg({ text: `Request to add ${qty} units of ${cleanType} (${diam}x${len}) submitted!`, type: 'success' });
             setNType('');
             setNSize('');
             setNQty('');
@@ -102,6 +133,8 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
             setRequests(rData);
         } catch (err) {
             setMsg({ text: err.message || 'Failed to submit add request', type: 'error' });
+        } finally {
+            setSubmittingReq(false);
         }
     };
 
@@ -277,34 +310,36 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
                                         min="1"
                                         required
                                     />
-                                    <button className="rpbtn" type="submit">
-                                        Send Allocation Request
+                                    <button className="rpbtn" type="submit" disabled={submittingReq}>
+                                        {submittingReq ? 'Submitting...' : 'Send Allocation Request'}
                                     </button>
                                 </form>
 
                                 {/* Add Timber Request Form */}
-                                <form className="rpform" onSubmit={sendAdd} style={{ margin: 0 }}>
+                                <form className="rpform" onSubmit={sendAdd} style={{ margin: 0 }} autoComplete="off">
                                     <h3>Request Add New Timber Stock</h3>
                                     <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '12px' }}>
                                         Notify manager of newly arrived timber stock to be added to inventory.
                                     </p>
                                     <input
                                         type="text"
-                                        placeholder="Species / Type"
+                                        placeholder="Species / Type (e.g. Teak, Rosewood)"
                                         value={nType}
                                         onChange={(e) => setNType(e.target.value)}
                                         required
+                                        autoComplete="off"
                                     />
                                     <input
                                         type="text"
-                                        placeholder="Diameter x Length "
+                                        placeholder="Diameter x Length (e.g. 4x10)"
                                         value={nSize}
                                         onChange={(e) => setNSize(e.target.value)}
                                         required
+                                        autoComplete="off"
                                     />
                                     <input
                                         type="number"
-                                        placeholder="Quantity "
+                                        placeholder="Quantity"
                                         value={nQty}
                                         onChange={(e) => setNQty(e.target.value)}
                                         min="1"
@@ -318,8 +353,8 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
                                         min="1"
                                         required
                                     />
-                                    <button className="rpbtn" type="submit">
-                                        Send Add Request
+                                    <button className="rpbtn" type="submit" disabled={submittingReq}>
+                                        {submittingReq ? 'Submitting...' : 'Send Add Request'}
                                     </button>
                                 </form>
                             </div>

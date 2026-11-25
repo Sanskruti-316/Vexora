@@ -581,9 +581,34 @@ app.post(
       }
     } else if (kind === "add") {
       // Worker requests adding new timber
-      if (!type || !size || !(Number(price) > 0)) {
-        throw new Error("Timber type, size, and positive price are required");
+      const cleanType = String(type || "").trim();
+      if (!cleanType) {
+        throw new Error("Timber species / type is required");
       }
+      if (/^\d+$/.test(cleanType)) {
+        throw new Error("Timber species name cannot be numeric. Please enter a valid wood name (e.g. Teak, Rosewood, Pine, Oak, Cedar)");
+      }
+      if (!/^[a-zA-Z][a-zA-Z0-9\s\-]{1,49}$/.test(cleanType)) {
+        throw new Error("Timber species name must start with a letter and contain valid characters (e.g. Teak, Rosewood)");
+      }
+
+      const cleanSize = String(size || "").trim();
+      const sizeMatch = cleanSize.match(/^(\d+(?:\.\d+)?)\s*[xX*]\s*(\d+(?:\.\d+)?)(?:\s*(?:ft|in|m)?)?$/);
+      if (!sizeMatch) {
+        throw new Error("Invalid timber dimensions. Format must be Diameter x Length with positive numbers (e.g. 4x10 or 12x32)");
+      }
+      const diam = parseFloat(sizeMatch[1]);
+      const len = parseFloat(sizeMatch[2]);
+      if (isNaN(diam) || isNaN(len) || diam <= 0 || len <= 0) {
+        throw new Error("Timber dimensions (diameter and length) must be positive numbers greater than zero");
+      }
+      const normalizedSize = `${diam}x${len}`;
+
+      const cleanPrice = parseFloat(price);
+      if (isNaN(cleanPrice) || cleanPrice <= 0) {
+        throw new Error("Price per unit must be greater than zero");
+      }
+
       if (pool.hasEnterpriseSchema) {
         let workerMgrId = null;
         const wRow = await pool.query("SELECT manager_id, owner_id FROM worker WHERE worker_id = $1", [req.user.id]);
@@ -598,20 +623,20 @@ app.post(
           }
         }
 
-        const typeRes = await pool.query("SELECT type_id FROM timber_type WHERE type_name ILIKE $1", [type.trim()]);
+        const typeRes = await pool.query("SELECT type_id FROM timber_type WHERE type_name ILIKE $1", [cleanType]);
         let typeId = typeRes.rows[0]?.type_id;
         if (!typeId) {
-          const insType = await pool.query("INSERT INTO timber_type (type_name, min_stock_level) VALUES ($1, 20) RETURNING type_id", [type.trim()]);
+          const insType = await pool.query("INSERT INTO timber_type (type_name, min_stock_level) VALUES ($1, 20) RETURNING type_id", [cleanType]);
           typeId = insType.rows[0].type_id;
         }
         await pool.query(
           "INSERT INTO add_timber_request (timber_code, quantity, price, status, request_time, worker_id, manager_id, type_id) VALUES ($1, $2, $3, 'Pending', NOW(), $4, $5, $6)",
-          [size.trim(), qty, Number(price), req.user.id, workerMgrId, typeId]
+          [normalizedSize, qty, cleanPrice, req.user.id, workerMgrId, typeId]
         );
       } else {
         await pool.query(
           "INSERT INTO requests (kind, worker_id, type, size, qty, price, status) VALUES ($1, $2, $3, $4, $5, $6, 'Pending')",
-          [kind, req.user.id, type.trim(), size.trim(), qty, Number(price)]
+          [kind, req.user.id, cleanType, normalizedSize, qty, cleanPrice]
         );
       }
     } else {
@@ -634,7 +659,7 @@ app.get(
              coalesce(u.email, w.email, '') as worker_email, 
              coalesce(u.owner_id, w.owner_id) as worker_owner_id 
       FROM requests r 
-      LEFT JOIN users u ON u.id = r.worker_id
+      LEFT JOIN users u ON u.id = r.worker_id AND u.role = 'worker'
       LEFT JOIN worker w ON w.worker_id = r.worker_id
     `;
     const params = [];
@@ -686,7 +711,7 @@ app.post(
       const { rows } = await client.query(
         `SELECT r.*, u.name as worker_name, u.owner_id as worker_owner_id 
          FROM requests r 
-         JOIN users u ON u.id = r.worker_id 
+         JOIN users u ON u.id = r.worker_id AND u.role = 'worker'
          WHERE r.id = $1`,
         [req.params.id]
       );
@@ -823,7 +848,7 @@ app.post(
     const { rows } = await pool.query(
       `SELECT r.id, u.owner_id as worker_owner_id 
        FROM requests r 
-       JOIN users u ON u.id = r.worker_id 
+       JOIN users u ON u.id = r.worker_id AND u.role = 'worker'
        WHERE r.id = $1`,
       [req.params.id]
     );
