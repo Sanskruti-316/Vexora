@@ -110,7 +110,7 @@ export async function checkLow(db = pool) {
         if (existing.rows.length === 0) {
           await db.query(
             "INSERT INTO low_stock_alert (current_quantity, min_level, alert_time, is_read, type_id, manager_id) VALUES ($1, $2, NOW(), false, $3, $4)",
-            [item.quantity, item.min_stock_level, item.type_id, targetManagerId]
+            [Math.round(Number(item.quantity || 0)), Math.round(Number(item.min_stock_level || 0)), item.type_id, targetManagerId]
           );
         }
       }
@@ -288,10 +288,10 @@ app.get(
           ) as pending_reqs
         `),
         pool.query(`
-          SELECT tt.type_name as type, SUM(t.quantity)::int as qty, SUM(t.quantity * t.price)::float8 as value
+          SELECT INITCAP(TRIM(tt.type_name)) as type, SUM(t.quantity)::int as qty, SUM(t.quantity * t.price)::float8 as value
           FROM timber t
           JOIN timber_type tt ON tt.type_id = t.type_id
-          GROUP BY tt.type_name ORDER BY tt.type_name
+          GROUP BY INITCAP(TRIM(tt.type_name)) ORDER BY INITCAP(TRIM(tt.type_name))
         `),
         pool.query(`
           SELECT status, COUNT(*)::int as count FROM (
@@ -340,7 +340,7 @@ app.get(
 
     // 2. Stock distribution by timber type (for Bar/Pie Chart)
     const { rows: stockByType } = await pool.query(
-      "SELECT type, SUM(qty) as qty, SUM(qty * price) as value FROM timber GROUP BY type ORDER BY type"
+      "SELECT INITCAP(TRIM(type)) as type, SUM(qty) as qty, SUM(qty * price) as value FROM timber GROUP BY INITCAP(TRIM(type)) ORDER BY INITCAP(TRIM(type))"
     );
 
     // 3. Request count grouped by status (for Status Doughnut/Pie Chart)
@@ -812,7 +812,6 @@ app.post(
             const newType = await client.query("INSERT INTO timber_type (type_name, min_stock_level) VALUES ($1, 20) RETURNING type_id", [reqItem.type]);
             typeId = newType.rows[0].type_id;
           }
-          const existing = await client.query("SELECT timber_id, quantity FROM timber WHERE type_id = $1 LIMIT 1", [typeId]);
           let diam = 4.0;
           let len = 10.0;
           const match = String(reqItem.size || "").match(/(\d+(?:\.\d+)?)\s*[xX*]\s*(\d+(?:\.\d+)?)/);
@@ -820,6 +819,10 @@ app.post(
             diam = parseFloat(match[1]) || 4.0;
             len = parseFloat(match[2]) || 10.0;
           }
+          const existing = await client.query(
+            "SELECT timber_id, quantity FROM timber WHERE type_id = $1 AND ABS(width - $2) < 0.01 AND ABS(length - $3) < 0.01 LIMIT 1",
+            [typeId, diam, len]
+          );
           let timberId;
           let newStock;
           if (existing.rows.length > 0) {
@@ -1380,10 +1383,10 @@ app.get(
     let sql;
     let params;
     if (targetOwnerId) {
-      sql = `SELECT id, name, email, phone, role, address as warehouse, address, owner_id, manager_id FROM users WHERE role IN (${placeholders}) AND owner_id = $${allowedRoles.length + 1} ORDER BY role, name`;
+      sql = `SELECT id, name, email, phone, role, address as warehouse, address, owner_id, manager_id FROM users WHERE role IN (${placeholders}) AND owner_id = $${allowedRoles.length + 1} ORDER BY role, id::bigint ASC`;
       params = [...allowedRoles, targetOwnerId];
     } else {
-      sql = `SELECT id, name, email, phone, role, address as warehouse, address, owner_id, manager_id FROM users WHERE role IN (${placeholders}) ORDER BY role, name`;
+      sql = `SELECT id, name, email, phone, role, address as warehouse, address, owner_id, manager_id FROM users WHERE role IN (${placeholders}) ORDER BY role, id::bigint ASC`;
       params = allowedRoles;
     }
 

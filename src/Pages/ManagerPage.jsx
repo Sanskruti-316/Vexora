@@ -11,6 +11,21 @@ const formatDim = (s) => {
     return `${str} ft`;
 };
 
+const consolidateStockByType = (items = []) => {
+    const map = new Map();
+    for (const item of items) {
+        const rawType = String(item.type || item.type_name || 'Timber').trim();
+        const normalizedType = rawType.charAt(0).toUpperCase() + rawType.slice(1);
+        const existing = map.get(normalizedType) || { type: normalizedType, qty: 0, value: 0 };
+        const q = Number(item.qty ?? item.quantity ?? 0);
+        const v = item.value != null ? Number(item.value) : (q * Number(item.price || 0));
+        existing.qty += q;
+        existing.value += v;
+        map.set(normalizedType, existing);
+    }
+    return Array.from(map.values()).sort((a, b) => a.type.localeCompare(b.type));
+};
+
 export default function ManagerPage({ onsignout }) {
     const [tab, setTab] = useState('inventory'); // 'inventory' | 'charts' (FR3) | 'requests' (FR2) | 'workers' (FR8) | 'wastage' (FR6) | 'txns' (FR5)
     const [timber, setTimber] = useState([]);
@@ -44,7 +59,7 @@ export default function ManagerPage({ onsignout }) {
             ]);
             if (Array.isArray(tData)) setTimber(tData);
             if (Array.isArray(rData)) setRequests(rData);
-            if (Array.isArray(uData)) setWorkers(uData.filter((u) => u.role === 'worker'));
+            if (Array.isArray(uData)) setWorkers(uData.filter((u) => u.role === 'worker').sort((a, b) => Number(a.id) - Number(b.id)));
             if (Array.isArray(txData)) setTxns(txData);
             if (Array.isArray(wData)) setWastageList(wData);
             if (Array.isArray(notifData)) setNotifications(notifData);
@@ -113,7 +128,7 @@ export default function ManagerPage({ onsignout }) {
             setWPhone('');
             setWPassword('');
             const uData = await api.getUsers();
-            setWorkers(uData.filter((u) => u.role === 'worker'));
+            setWorkers(uData.filter((u) => u.role === 'worker').sort((a, b) => Number(a.id) - Number(b.id)));
         } catch (err) {
             setMsg({ text: err.message || 'Failed to create worker', type: 'error' });
         }
@@ -135,10 +150,12 @@ export default function ManagerPage({ onsignout }) {
     const low = timber.filter((t) => Number(t.qty ?? t.quantity ?? 0) <= Number(t.min ?? t.min_stock_level ?? 10));
     const pending = requests.filter((r) => String(r.status).toUpperCase() === 'PENDING');
 
-    // Chart calculations for FR3
-    const stockItems = stats?.stockByType || [];
+    // Chart calculations for FR3 - group all dimensions of each timber type together into one item
+    const rawStockSource = (stats?.stockByType && stats.stockByType.length > 0) ? stats.stockByType : timber;
+    const stockItems = consolidateStockByType(rawStockSource);
     const totalQty = stockItems.reduce((acc, s) => acc + Number(s.qty || 0), 0);
     const totalValue = stockItems.reduce((acc, s) => acc + Number(s.value || 0), 0);
+    const sortedWorkers = [...workers].sort((a, b) => Number(a.id) - Number(b.id));
 
     const tabs = [
         ['inventory', 'Timber Stock'],
@@ -529,7 +546,7 @@ export default function ManagerPage({ onsignout }) {
                                                 </td>
                                             </tr>
                                         )}
-                                        {workers.map((w) => (
+                                        {sortedWorkers.map((w) => (
                                             <tr key={w.id}>
                                                 <td>{w.id}</td>
                                                 <td>

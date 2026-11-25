@@ -4,6 +4,21 @@ import InventoryTable from './InventoryTable';
 
 const rupees = (n) => '₹' + Number(n || 0).toLocaleString('en-IN');
 
+const consolidateStockByType = (items = []) => {
+    const map = new Map();
+    for (const item of items) {
+        const rawType = String(item.type || item.type_name || 'Timber').trim();
+        const normalizedType = rawType.charAt(0).toUpperCase() + rawType.slice(1);
+        const existing = map.get(normalizedType) || { type: normalizedType, qty: 0, value: 0 };
+        const q = Number(item.qty ?? item.quantity ?? 0);
+        const v = item.value != null ? Number(item.value) : (q * Number(item.price || 0));
+        existing.qty += q;
+        existing.value += v;
+        map.set(normalizedType, existing);
+    }
+    return Array.from(map.values()).sort((a, b) => a.type.localeCompare(b.type));
+};
+
 export default function OwnerPage({ onsignout }) {
     const [tab, setTab] = useState('analytics'); // 'analytics' | 'inventory' | 'users' | 'txns'
     const [stats, setStats] = useState(null);
@@ -96,11 +111,12 @@ export default function OwnerPage({ onsignout }) {
         }
     };
 
-    const managers = users.filter((u) => u.role === 'manager');
-    const workers = users.filter((u) => u.role === 'worker');
+    const managers = users.filter((u) => u.role === 'manager').sort((a, b) => Number(a.id) - Number(b.id));
+    const workers = users.filter((u) => u.role === 'worker').sort((a, b) => Number(a.id) - Number(b.id));
 
-    // Chart calculations for FR3
-    const stockItems = stats?.stockByType || [];
+    // Chart calculations for FR3 - group all dimensions of each timber type together into one item
+    const rawStockSource = (stats?.stockByType && stats.stockByType.length > 0) ? stats.stockByType : timber;
+    const stockItems = consolidateStockByType(rawStockSource);
     const totalQty = stockItems.reduce((acc, s) => acc + Number(s.qty || 0), 0);
     const totalValue = stockItems.reduce((acc, s) => acc + Number(s.value || 0), 0);
 
