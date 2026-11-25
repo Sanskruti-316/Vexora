@@ -207,3 +207,77 @@ export function processTimberQuery(records, options = {}) {
     message: result.length === 0 ? "No Records Found" : "Success",
   };
 }
+
+// ============================================================================
+// 4. CONCURRENCY CONTROL: MUTEX LOCK (Mutual Exclusion)
+// ============================================================================
+
+/**
+ * 4.1 Stock Mutex Lock Class
+ *
+ * Implements a Mutual Exclusion (Mutex) Lock per stock record ID.
+ * Allows only one worker's request to update or allocate a particular
+ * stock record at a time. Other requests must wait in a FIFO queue.
+ *
+ * Example:
+ * If there are 20 units of timber in stock:
+ * - Worker 1 requests 17 units (Acquires lock, 17 reserved, Lock released)
+ * - Worker 2 requests 3 units  (Acquires lock, 3 reserved, Lock released)
+ * - Worker 3 requests 20 units (Acquires lock, rejected because 17+3=20 already reserved, Lock released)
+ * -> Only 20 units can be given / allocated (i.e. 17 and 3, or 20 only).
+ */
+export class StockMutexLock {
+  constructor() {
+    this.locks = new Map();
+    this.queueLengths = new Map();
+  }
+
+  async acquire(timberId) {
+    const key = String(timberId);
+    this.queueLengths.set(key, (this.queueLengths.get(key) || 0) + 1);
+
+    let release;
+    const nextLock = new Promise((resolve) => {
+      release = resolve;
+    });
+
+    const currentLock = this.locks.get(key) || Promise.resolve();
+    this.locks.set(key, currentLock.then(() => nextLock));
+
+    await currentLock;
+
+    let isReleased = false;
+    return () => {
+      if (!isReleased) {
+        isReleased = true;
+        const remaining = (this.queueLengths.get(key) || 1) - 1;
+        if (remaining <= 0) {
+          this.queueLengths.delete(key);
+          this.locks.delete(key);
+        } else {
+          this.queueLengths.set(key, remaining);
+        }
+        release();
+      }
+    };
+  }
+
+  async withLock(timberId, fn) {
+    const unlock = await this.acquire(timberId);
+    try {
+      return await fn();
+    } finally {
+      unlock();
+    }
+  }
+
+  isLocked(timberId) {
+    return (this.queueLengths.get(String(timberId)) || 0) > 0;
+  }
+
+  getQueueLength(timberId) {
+    return this.queueLengths.get(String(timberId)) || 0;
+  }
+}
+
+export const stockMutex = new StockMutexLock();

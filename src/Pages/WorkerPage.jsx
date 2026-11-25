@@ -323,7 +323,7 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
                                     </p>
                                     <input
                                         type="text"
-                                        placeholder="Species / Type (e.g. Teak, Rosewood)"
+                                        placeholder="Species / Type "
                                         value={nType}
                                         onChange={(e) => setNType(e.target.value)}
                                         required
@@ -331,7 +331,7 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
                                     />
                                     <input
                                         type="text"
-                                        placeholder="Diameter x Length (e.g. 4x10)"
+                                        placeholder="Diameter x Length "
                                         value={nSize}
                                         onChange={(e) => setNSize(e.target.value)}
                                         required
@@ -576,7 +576,7 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
                                             <input
                                                 type="number"
                                                 step="any"
-                                                placeholder="Enter wastage length in ft (e.g. 0.5, 1.25)"
+                                                placeholder="Enter wastage length in ft "
                                                 value={wQty}
                                                 onChange={(e) => setWQty(e.target.value)}
                                                 min="0.01"
@@ -592,7 +592,7 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
                                             </label>
                                             <input
                                                 type="text"
-                                                placeholder="e.g. End grain split, deep rot, knots, saw blade defect"
+                                                placeholder=""
                                                 value={wWhy}
                                                 onChange={(e) => setWWhy(e.target.value)}
                                                 required

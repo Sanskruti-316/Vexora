@@ -26,6 +26,8 @@ import {
   searchAddress,
   searchTimberName,
   searchSize,
+  stockMutex,
+  StockMutexLock,
 } from "./algorithms.js";
 
 const app = express();
@@ -542,43 +544,73 @@ app.post(
 
     if (kind === "allocate") {
       // Worker requests allocation of existing stored timber
-      const { rows } = await pool.query(
-        pool.hasEnterpriseSchema
-          ? "SELECT t.*, tt.type_name as type, t.quantity as qty, (t.width::float || 'x' || t.length::float || ' ft') as size FROM timber t JOIN timber_type tt ON tt.type_id = t.type_id WHERE t.timber_id = $1"
-          : "SELECT * FROM timber WHERE id = $1",
-        [timber_id]
-      );
-      const item = rows[0];
-      if (!item) throw new Error("Timber item not found");
-      const currentQty = Number(item.qty ?? item.quantity ?? 0);
-      if (qty > currentQty) {
-        throw new Error(`Requested ${qty} exceeds available stock of ${currentQty} units`);
-      }
+      // Enforce Mutex Lock for this timber record to serialize allocation requests and prevent over-allocation race conditions
+      return await stockMutex.withLock(timber_id, async () => {
+        const { rows } = await pool.query(
+          pool.hasEnterpriseSchema
+            ? "SELECT t.*, tt.type_name as type, t.quantity as qty, (t.width::float || 'x' || t.length::float || ' ft') as size FROM timber t JOIN timber_type tt ON tt.type_id = t.type_id WHERE t.timber_id = $1"
+            : "SELECT * FROM timber WHERE id = $1",
+          [timber_id]
+        );
+        const item = rows[0];
+        if (!item) throw new Error("Timber item not found");
+        const physicalStock = Number(item.qty ?? item.quantity ?? 0);
 
-      if (pool.hasEnterpriseSchema) {
-        let workerMgrId = null;
-        const wRow = await pool.query("SELECT manager_id, owner_id FROM worker WHERE worker_id = $1", [req.user.id]);
-        if (wRow.rows.length > 0) {
-          if (wRow.rows[0].manager_id) {
-            const checkM = await pool.query("SELECT manager_id FROM manager WHERE manager_id = $1", [wRow.rows[0].manager_id]);
-            if (checkM.rows.length > 0) workerMgrId = checkM.rows[0].manager_id;
-          }
-          if (!workerMgrId && wRow.rows[0].owner_id) {
-            const sameOwnerM = await pool.query("SELECT manager_id FROM manager WHERE owner_id = $1 ORDER BY manager_id ASC LIMIT 1", [wRow.rows[0].owner_id]);
-            workerMgrId = sameOwnerM.rows[0]?.manager_id || null;
-          }
+        // Mutex Lock concurrency check: calculate currently pending unallocated requests for this timber
+        let pendingQty = 0;
+        if (pool.hasEnterpriseSchema) {
+          const pRes = await pool.query(
+            "SELECT COALESCE(SUM(quantity), 0) as total_pending FROM allocation_request WHERE timber_id = $1 AND status = 'Pending'",
+            [timber_id]
+          );
+          pendingQty = Number(pRes.rows[0]?.total_pending || 0);
+        } else {
+          const pRes = await pool.query(
+            "SELECT COALESCE(SUM(qty), 0) as total_pending FROM requests WHERE timber_id = $1 AND kind = 'allocate' AND status = 'Pending'",
+            [timber_id]
+          );
+          pendingQty = Number(pRes.rows[0]?.total_pending || 0);
         }
 
-        await pool.query(
-          "INSERT INTO allocation_request (quantity, status, request_time, worker_id, manager_id, timber_id) VALUES ($1, 'Pending', NOW(), $2, $3, $4)",
-          [qty, req.user.id, workerMgrId, timber_id]
-        );
-      } else {
-        await pool.query(
-          "INSERT INTO requests (kind, worker_id, timber_id, type, size, qty, status) VALUES ($1, $2, $3, $4, $5, $6, 'Pending')",
-          [kind, req.user.id, timber_id, item.type, item.size, qty]
-        );
-      }
+        const availableUnreserved = Math.max(0, physicalStock - pendingQty);
+        if (qty > availableUnreserved) {
+          throw new Error(
+            `Cannot allocate ${qty} units: Mutex Lock enforced. Only ${availableUnreserved} unreserved units available (${pendingQty} units already reserved out of ${physicalStock} in stock).`
+          );
+        }
+
+        if (pool.hasEnterpriseSchema) {
+          let workerMgrId = null;
+          const wRow = await pool.query("SELECT manager_id, owner_id FROM worker WHERE worker_id = $1", [req.user.id]);
+          if (wRow.rows.length > 0) {
+            if (wRow.rows[0].manager_id) {
+              const checkM = await pool.query("SELECT manager_id FROM manager WHERE manager_id = $1", [wRow.rows[0].manager_id]);
+              if (checkM.rows.length > 0) workerMgrId = checkM.rows[0].manager_id;
+            }
+            if (!workerMgrId && wRow.rows[0].owner_id) {
+              const sameOwnerM = await pool.query("SELECT manager_id FROM manager WHERE owner_id = $1 ORDER BY manager_id ASC LIMIT 1", [wRow.rows[0].owner_id]);
+              workerMgrId = sameOwnerM.rows[0]?.manager_id || null;
+            }
+          }
+
+          await pool.query(
+            "INSERT INTO allocation_request (quantity, status, request_time, worker_id, manager_id, timber_id) VALUES ($1, 'Pending', NOW(), $2, $3, $4)",
+            [qty, req.user.id, workerMgrId, timber_id]
+          );
+        } else {
+          await pool.query(
+            "INSERT INTO requests (kind, worker_id, timber_id, type, size, qty, status) VALUES ($1, $2, $3, $4, $5, $6, 'Pending')",
+            [kind, req.user.id, timber_id, item.type, item.size, qty]
+          );
+        }
+
+        return res.status(201).json({
+          message: "Request submitted successfully",
+          reservedQty: qty,
+          remainingUnreserved: availableUnreserved - qty,
+          mutexLocked: true,
+        });
+      });
     } else if (kind === "add") {
       // Worker requests adding new timber
       const cleanType = String(type || "").trim();
@@ -739,35 +771,37 @@ app.post(
       }
 
       if (reqItem.kind === "allocate") {
-        // Allocate stored timber: verify stock and deduct
-        if (pool.hasEnterpriseSchema) {
-          const rawId = reqItem.raw_id || parseInt(String(reqItem.id).replace(/\D/g, ""), 10);
-          const stockRes = await client.query("SELECT * FROM timber WHERE timber_id = $1", [reqItem.timber_id]);
-          const timber = stockRes.rows[0];
-          if (!timber || timber.quantity < reqItem.qty) {
-            throw new Error("Cannot allocate: Insufficient stock available in warehouse");
+        // Allocate stored timber: verify stock and deduct under stockMutex exclusive lock
+        await stockMutex.withLock(reqItem.timber_id, async () => {
+          if (pool.hasEnterpriseSchema) {
+            const rawId = reqItem.raw_id || parseInt(String(reqItem.id).replace(/\D/g, ""), 10);
+            const stockRes = await client.query("SELECT * FROM timber WHERE timber_id = $1 FOR UPDATE", [reqItem.timber_id]);
+            const timber = stockRes.rows[0];
+            if (!timber || timber.quantity < reqItem.qty) {
+              throw new Error("Cannot allocate: Insufficient stock available in warehouse");
+            }
+            const newStock = Math.max(0, timber.quantity - reqItem.qty);
+            await client.query("UPDATE timber SET quantity = $1 WHERE timber_id = $2", [newStock, reqItem.timber_id]);
+            await client.query("UPDATE allocation_request SET status = 'Approved', decided_at = NOW() WHERE allocation_id = $1", [rawId]);
+            const performer = reqItem.worker_name ? `${reqItem.worker_name} (Worker)` : (req.user.name ? `${req.user.name} (Manager)` : "Worker");
+            await client.query(
+              "INSERT INTO stock_transaction (txn_type, quantity, stock_after, txn_time, timber_id, allocation_id, performed_by) VALUES ('Allocation', $1, $2, NOW(), $3, $4, $5)",
+              [reqItem.qty, newStock, reqItem.timber_id, rawId, performer]
+            );
+          } else {
+            const stockRes = await client.query("SELECT * FROM timber WHERE id = $1 FOR UPDATE", [reqItem.timber_id]);
+            const timber = stockRes.rows[0];
+            if (!timber || timber.qty < reqItem.qty) {
+              throw new Error("Cannot allocate: Insufficient stock available in warehouse");
+            }
+            await client.query("UPDATE timber SET qty = qty - $1 WHERE id = $2", [reqItem.qty, reqItem.timber_id]);
+            await client.query(
+              "INSERT INTO txns (date, kind, type, qty, done_by) VALUES (CURRENT_DATE, $1, $2, $3, $4)",
+              ["Allocated", reqItem.type, reqItem.qty, reqItem.worker_name]
+            );
+            await client.query("UPDATE requests SET status = 'Accepted' WHERE id = $1", [reqItem.id]);
           }
-          const newStock = Math.max(0, timber.quantity - reqItem.qty);
-          await client.query("UPDATE timber SET quantity = $1 WHERE timber_id = $2", [newStock, reqItem.timber_id]);
-          await client.query("UPDATE allocation_request SET status = 'Approved', decided_at = NOW() WHERE allocation_id = $1", [rawId]);
-          const performer = reqItem.worker_name ? `${reqItem.worker_name} (Worker)` : (req.user.name ? `${req.user.name} (Manager)` : "Worker");
-          await client.query(
-            "INSERT INTO stock_transaction (txn_type, quantity, stock_after, txn_time, timber_id, allocation_id, performed_by) VALUES ('Allocation', $1, $2, NOW(), $3, $4, $5)",
-            [reqItem.qty, newStock, reqItem.timber_id, rawId, performer]
-          );
-        } else {
-          const stockRes = await client.query("SELECT * FROM timber WHERE id = $1", [reqItem.timber_id]);
-          const timber = stockRes.rows[0];
-          if (!timber || timber.qty < reqItem.qty) {
-            throw new Error("Cannot allocate: Insufficient stock available in warehouse");
-          }
-          await client.query("UPDATE timber SET qty = qty - $1 WHERE id = $2", [reqItem.qty, reqItem.timber_id]);
-          await client.query(
-            "INSERT INTO txns (date, kind, type, qty, done_by) VALUES (CURRENT_DATE, $1, $2, $3, $4)",
-            ["Allocated", reqItem.type, reqItem.qty, reqItem.worker_name]
-          );
-          await client.query("UPDATE requests SET status = 'Accepted' WHERE id = $1", [reqItem.id]);
-        }
+        });
       } else {
         // Add timber: update existing type+size or insert new row
         if (pool.hasEnterpriseSchema) {
@@ -924,6 +958,111 @@ app.get("/api/transactions", auth("manager", "owner"), (req, res, next) => {
   // Alias for /api/txns
   app._router.handle({ ...req, url: "/api/txns" }, res, next);
 });
+
+// ==========================================
+// CONCURRENCY CONTROL: MUTEX LOCK SIMULATION
+// Simulates concurrent worker allocation requests against a single stock record.
+// User requirement:
+// "if there are 20 units of a certain timber then and if one worker requests 17
+//  another requests 3 and another requests 20 of the same timber then only 20
+//  units can be given/allocated i.e. 17 and 3 or 20 only"
+// ==========================================
+app.post(
+  "/api/mutex/simulate",
+  h(async (req, res) => {
+    const totalUnits = Number(req.body.initial_stock || 20);
+    const workerRequests = Array.isArray(req.body.requests) && req.body.requests.length > 0
+      ? req.body.requests
+      : [
+          { worker: "Worker 1", qty: 17 },
+          { worker: "Worker 2", qty: 3 },
+          { worker: "Worker 3", qty: 20 },
+        ];
+
+    const testMutex = new StockMutexLock();
+    let currentStock = totalUnits;
+    let allocatedTotal = 0;
+    const timeline = [];
+
+    // Run all worker requests concurrently through the mutex lock
+    const results = await Promise.all(
+      workerRequests.map(async (reqItem, index) => {
+        const workerName = reqItem.worker || `Worker ${index + 1}`;
+        const requestedQty = Number(reqItem.qty || reqItem);
+
+        const startTime = Date.now();
+        timeline.push({
+          time: new Date().toISOString(),
+          worker: workerName,
+          status: "Waiting for Mutex Lock",
+          requested: requestedQty,
+        });
+
+        return await testMutex.withLock("simulated_stock_item", async () => {
+          const lockAcquiredTime = Date.now();
+          timeline.push({
+            time: new Date().toISOString(),
+            worker: workerName,
+            status: "Lock Acquired",
+            currentStock,
+            requested: requestedQty,
+          });
+
+          // Small delay to simulate DB critical section
+          await new Promise((resolve) => setTimeout(resolve, 30));
+
+          if (requestedQty <= currentStock) {
+            currentStock -= requestedQty;
+            allocatedTotal += requestedQty;
+            const outcome = {
+              worker: workerName,
+              requested: requestedQty,
+              granted: true,
+              allocated: requestedQty,
+              stockRemaining: currentStock,
+              waitTimeMs: lockAcquiredTime - startTime,
+              message: `Granted ${requestedQty} units under Mutex Lock. Stock remaining: ${currentStock}.`,
+            };
+            timeline.push({
+              time: new Date().toISOString(),
+              worker: workerName,
+              status: "Granted & Released Lock",
+              remaining: currentStock,
+            });
+            return outcome;
+          } else {
+            const outcome = {
+              worker: workerName,
+              requested: requestedQty,
+              granted: false,
+              allocated: 0,
+              stockRemaining: currentStock,
+              waitTimeMs: lockAcquiredTime - startTime,
+              error: `Mutex Lock Rejected: Requested ${requestedQty} units exceeds available stock of ${currentStock} units (${allocatedTotal} units already allocated out of ${totalUnits}).`,
+            };
+            timeline.push({
+              time: new Date().toISOString(),
+              worker: workerName,
+              status: "Rejected & Released Lock",
+              remaining: currentStock,
+            });
+            return outcome;
+          }
+        });
+      })
+    );
+
+    res.json({
+      initialStock: totalUnits,
+      totalAllocated: allocatedTotal,
+      finalStockRemaining: currentStock,
+      maxStockLimitEnforced: allocatedTotal <= totalUnits,
+      workerResults: results,
+      timeline,
+      summary: `Out of ${totalUnits} initial units, exactly ${allocatedTotal} units allocated. Over-allocation was prevented by Mutex Lock.`,
+    });
+  })
+);
 
 // ==========================================
 // FR6: TIMBER WASTAGE MANAGEMENT
