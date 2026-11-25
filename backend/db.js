@@ -181,14 +181,14 @@ export async function initDb() {
       pool.hasEnterpriseSchema = true;
       console.log("Supabase schema detected. Creating compatibility views...");
 
-      // Create users view combining owner, manager, worker
+      // Create users view combining owner, manager, worker (active accounts)
       await pool.query(`
         CREATE OR REPLACE VIEW users AS
-        SELECT owner_id as id, name, email, phone, password_hash, 'owner'::varchar as role, is_active, address, owner_id, NULL::bigint as manager_id FROM owner
+        SELECT owner_id as id, name, email, phone, password_hash, 'owner'::varchar as role, is_active, address, owner_id, NULL::bigint as manager_id FROM owner WHERE is_active = true
         UNION ALL
-        SELECT manager_id as id, name, email, phone, password_hash, 'manager'::varchar as role, is_active, address, owner_id, NULL::bigint as manager_id FROM manager
+        SELECT manager_id as id, name, email, phone, password_hash, 'manager'::varchar as role, is_active, address, owner_id, NULL::bigint as manager_id FROM manager WHERE is_active = true
         UNION ALL
-        SELECT worker_id as id, name, email, phone, password_hash, 'worker'::varchar as role, is_active, address, owner_id, manager_id FROM worker;
+        SELECT worker_id as id, name, email, phone, password_hash, 'worker'::varchar as role, is_active, address, owner_id, manager_id FROM worker WHERE is_active = true;
       `);
 
       // Compatibility views requests and txns over the official schema

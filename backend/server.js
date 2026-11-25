@@ -629,9 +629,13 @@ app.get(
   h(async (req, res) => {
     const isWorker = req.user.role === "worker";
     let sql = `
-      SELECT r.*, u.name as worker_name, u.email as worker_email, u.owner_id as worker_owner_id 
+      SELECT r.*, 
+             coalesce(u.name, w.name, 'Worker #' || r.worker_id) as worker_name, 
+             coalesce(u.email, w.email, '') as worker_email, 
+             coalesce(u.owner_id, w.owner_id) as worker_owner_id 
       FROM requests r 
-      JOIN users u ON u.id = r.worker_id
+      LEFT JOIN users u ON u.id = r.worker_id
+      LEFT JOIN worker w ON w.worker_id = r.worker_id
     `;
     const params = [];
     const conditions = [];
@@ -1353,9 +1357,21 @@ app.delete(
 
     if (pool.hasEnterpriseSchema) {
       if (target.role === "manager") {
-        await pool.query("DELETE FROM manager WHERE manager_id = $1", [targetUserId]);
+        await pool.query("UPDATE worker SET manager_id = NULL WHERE manager_id = $1", [targetUserId]);
+        await pool.query("UPDATE low_stock_alert SET manager_id = NULL WHERE manager_id = $1", [targetUserId]);
+        await pool.query("UPDATE allocation_request SET manager_id = NULL WHERE manager_id = $1", [targetUserId]);
+        await pool.query("UPDATE add_timber_request SET manager_id = NULL WHERE manager_id = $1", [targetUserId]);
+        try {
+          await pool.query("DELETE FROM manager WHERE manager_id = $1", [targetUserId]);
+        } catch {
+          await pool.query("UPDATE manager SET is_active = false WHERE manager_id = $1", [targetUserId]);
+        }
       } else if (target.role === "worker") {
-        await pool.query("DELETE FROM worker WHERE worker_id = $1", [targetUserId]);
+        try {
+          await pool.query("DELETE FROM worker WHERE worker_id = $1", [targetUserId]);
+        } catch {
+          await pool.query("UPDATE worker SET is_active = false WHERE worker_id = $1", [targetUserId]);
+        }
       }
     } else {
       await pool.query("DELETE FROM users WHERE id = $1", [targetUserId]);
