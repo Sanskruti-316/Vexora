@@ -80,7 +80,13 @@ export default function ManagerPage({ onsignout }) {
         setMsg({ text: '', type: '' });
         try {
             await api.acceptRequest(reqItem.id);
-            setMsg({ text: `Request #${reqItem.id} accepted successfully! Inventory updated.`, type: 'success' });
+            const itemDesc = reqItem.size
+                ? `${reqItem.type} (${formatDim(reqItem.size)})`
+                : (reqItem.type || 'timber');
+            const message = reqItem.kind === 'allocate'
+                ? `Allocated ${reqItem.qty} units of ${itemDesc} to ${reqItem.worker_name || 'worker'}.`
+                : `Added ${reqItem.qty} units of ${itemDesc} to inventory.`;
+            setMsg({ text: message, type: 'success' });
             loadAll();
         } catch (err) {
             setMsg({ text: err.message || 'Failed to accept request', type: 'error' });
@@ -88,11 +94,19 @@ export default function ManagerPage({ onsignout }) {
     };
 
     // FR2: Manager rejects a request
-    const handleReject = async (reqId) => {
+    const handleReject = async (reqItemOrId) => {
         setMsg({ text: '', type: '' });
+        const isObj = reqItemOrId && typeof reqItemOrId === 'object';
+        const reqId = isObj ? reqItemOrId.id : reqItemOrId;
         try {
             await api.rejectRequest(reqId);
-            setMsg({ text: `Request #${reqId} rejected.`, type: 'success' });
+            const itemDesc = isObj && reqItemOrId.size
+                ? `${reqItemOrId.type} (${formatDim(reqItemOrId.size)})`
+                : (isObj && reqItemOrId.type ? reqItemOrId.type : 'timber');
+            const message = isObj
+                ? `Rejected request for ${reqItemOrId.qty} units of ${itemDesc}.`
+                : 'Request rejected.';
+            setMsg({ text: message, type: 'success' });
             loadAll();
         } catch (err) {
             setMsg({ text: err.message || 'Failed to reject request', type: 'error' });
@@ -303,7 +317,7 @@ export default function ManagerPage({ onsignout }) {
                                 }}
                             >
                                 <h3 style={{ margin: '0 0 15px 0', color: '#1e293b' }}>
-                                    Available Stock Quantity by Timber Species 
+                                    Available Stock Quantity by Timber Species
                                 </h3>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                                     {stockItems.length === 0 && <p className="opempty">No stock records found.</p>}
@@ -484,7 +498,7 @@ export default function ManagerPage({ onsignout }) {
                                                                 </button>
                                                                 <button
                                                                     className="rpbtn grey"
-                                                                    onClick={() => handleReject(r.id)}
+                                                                    onClick={() => handleReject(r)}
                                                                 >
                                                                     Reject
                                                                 </button>

@@ -176,7 +176,7 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
 
         if (Number(selectedAllocation.wasted_qty || 0) > 0) {
             return setMsg({
-                text: `Wastage has already been recorded for this allocated wood (Allocation #${selectedAllocation.allocation_id || selectedAllocation.id}). A worker cannot allot wastage for a certain wood more than once.`,
+                text: `Wastage has already been recorded for this allocated ${selectedAllocation.type}. A worker cannot allot wastage for a wood item more than once.`,
                 type: 'error',
             });
         }
@@ -200,7 +200,7 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
                 reason: reason || 'Defects / Cutting Loss',
             });
             setMsg({
-                text: `Successfully accounted for ${qty} ft of wastage for Allocation #${selectedAllocation.allocation_id || selectedAllocation.id} (${selectedAllocation.type})!`,
+                text: `Recorded ${qty} ft wastage for ${selectedAllocation.type} (${formatDim(selectedAllocation.size)}).`,
                 type: 'success',
             });
             setSelectedAllocId('');
@@ -558,7 +558,7 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
                                                         value={a.allocation_id || a.id}
                                                         disabled={Number(a.wasted_qty || 0) > 0 || a.remaining_qty <= 0}
                                                     >
-                                                        Allocation #{a.allocation_id || a.id}: {a.type} ({formatDim(a.size)}) — {Number(a.wasted_qty || 0) > 0 ? 'Wastage Already Allotted' : `${a.remaining_qty} ft available`}
+                                                        {a.type} ({formatDim(a.size)}) — {Number(a.wasted_qty || 0) > 0 ? 'Wastage Already Logged' : `${a.remaining_qty} ft available`}
                                                     </option>
                                                 ))}
                                             </select>
