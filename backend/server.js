@@ -1314,13 +1314,21 @@ app.delete(
   auth("owner", "manager"),
   h(async (req, res) => {
     const targetUserId = req.params.id;
+    const requestedRole = req.query.role || req.body?.role || (req.user.role === "manager" ? "worker" : null);
 
     // Prevent self-deletion
-    if (Number(targetUserId) === req.user.id) {
+    if (Number(targetUserId) === req.user.id && (!requestedRole || req.user.role === requestedRole)) {
       throw new Error("You cannot delete your own account");
     }
 
-    const { rows } = await pool.query("SELECT id, role, name, owner_id, manager_id FROM users WHERE id = $1", [targetUserId]);
+    let query = "SELECT id, role, name, owner_id, manager_id FROM users WHERE id = $1";
+    const queryParams = [targetUserId];
+    if (requestedRole) {
+      query += " AND role = $2";
+      queryParams.push(requestedRole);
+    }
+
+    const { rows } = await pool.query(query, queryParams);
     const target = rows[0];
 
     if (!target) throw new Error("User account not found");
@@ -1357,21 +1365,9 @@ app.delete(
 
     if (pool.hasEnterpriseSchema) {
       if (target.role === "manager") {
-        await pool.query("UPDATE worker SET manager_id = NULL WHERE manager_id = $1", [targetUserId]);
-        await pool.query("UPDATE low_stock_alert SET manager_id = NULL WHERE manager_id = $1", [targetUserId]);
-        await pool.query("UPDATE allocation_request SET manager_id = NULL WHERE manager_id = $1", [targetUserId]);
-        await pool.query("UPDATE add_timber_request SET manager_id = NULL WHERE manager_id = $1", [targetUserId]);
-        try {
-          await pool.query("DELETE FROM manager WHERE manager_id = $1", [targetUserId]);
-        } catch {
-          await pool.query("UPDATE manager SET is_active = false WHERE manager_id = $1", [targetUserId]);
-        }
+        await pool.query("DELETE FROM manager WHERE manager_id = $1", [targetUserId]);
       } else if (target.role === "worker") {
-        try {
-          await pool.query("DELETE FROM worker WHERE worker_id = $1", [targetUserId]);
-        } catch {
-          await pool.query("UPDATE worker SET is_active = false WHERE worker_id = $1", [targetUserId]);
-        }
+        await pool.query("DELETE FROM worker WHERE worker_id = $1", [targetUserId]);
       }
     } else {
       await pool.query("DELETE FROM users WHERE id = $1", [targetUserId]);

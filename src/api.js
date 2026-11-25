@@ -193,8 +193,9 @@ export const api = {
     });
   },
 
-  async deleteUser(userId) {
-    return request(`/users/${userId}`, { method: "DELETE" });
+  async deleteUser(userId, role) {
+    const qs = role ? `?role=${encodeURIComponent(role)}` : "";
+    return request(`/users/${userId}${qs}`, { method: "DELETE" });
   },
 
   // ==========================================

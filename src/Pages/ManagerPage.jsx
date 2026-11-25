@@ -116,7 +116,7 @@ export default function ManagerPage({ onsignout }) {
     const handleRemoveWorker = async (workerId, workerName) => {
         if (!window.confirm(`Are you sure you want to remove worker '${workerName}'?`)) return;
         try {
-            await api.deleteUser(workerId);
+            await api.deleteUser(workerId, 'worker');
             setMsg({ text: `Worker '${workerName}' removed.`, type: 'success' });
             setWorkers((prev) => prev.filter((w) => w.id !== workerId));
         } catch (err) {
@@ -518,9 +518,9 @@ export default function ManagerPage({ onsignout }) {
                                                 </td>
                                             </tr>
                                         )}
-                                        {workers.map((w, idx) => (
+                                        {workers.map((w) => (
                                             <tr key={w.id}>
-                                                <td>{idx + 1}</td>
+                                                <td>{w.id}</td>
                                                 <td>
                                                     <strong>{w.name}</strong>
                                                 </td>

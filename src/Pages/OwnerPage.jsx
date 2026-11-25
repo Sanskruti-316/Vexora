@@ -88,9 +88,9 @@ export default function OwnerPage({ onsignout }) {
     const handleDeleteUser = async (userId, userName, role) => {
         if (!window.confirm(`Are you sure you want to delete ${role} '${userName}'?`)) return;
         try {
-            await api.deleteUser(userId);
+            await api.deleteUser(userId, role);
             setMsg({ text: `Removed ${role} '${userName}' successfully.`, type: 'success' });
-            setUsers((prev) => prev.filter((u) => u.id !== userId));
+            setUsers((prev) => prev.filter((u) => !(u.id === userId && u.role === role)));
         } catch (err) {
             setMsg({ text: err.message || 'Failed to delete user', type: 'error' });
         }
@@ -490,9 +490,9 @@ export default function OwnerPage({ onsignout }) {
                                                 </td>
                                             </tr>
                                         )}
-                                        {managers.map((m, idx) => (
+                                        {managers.map((m) => (
                                             <tr key={m.id}>
-                                                <td>{idx + 1}</td>
+                                                <td>{m.id}</td>
                                                 <td>
                                                     <strong>{m.name}</strong>
                                                 </td>
@@ -543,9 +543,9 @@ export default function OwnerPage({ onsignout }) {
                                                 </td>
                                             </tr>
                                         )}
-                                        {workers.map((w, idx) => (
+                                        {workers.map((w) => (
                                             <tr key={w.id}>
-                                                <td>{idx + 1}</td>
+                                                <td>{w.id}</td>
                                                 <td>
                                                     <strong>{w.name}</strong>
                                                 </td>
