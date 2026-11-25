@@ -634,7 +634,7 @@ app.post(
       if (isNaN(diam) || isNaN(len) || diam <= 0 || len <= 0) {
         throw new Error("Timber dimensions (diameter and length) must be positive numbers greater than zero");
       }
-      const normalizedSize = `${diam}x${len}`;
+      const normalizedSize = `${diam}x${len} ft`;
 
       const cleanPrice = parseFloat(price);
       if (isNaN(cleanPrice) || cleanPrice <= 0) {

@@ -2,6 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../api';
 import InventoryTable from './InventoryTable';
 
+const formatDim = (s) => {
+    if (!s) return '';
+    const str = String(s).trim();
+    if (/\s*ft$/i.test(str)) return str;
+    return `${str} ft`;
+};
+
 export default function WorkerPage({ onsignout, name = 'Worker' }) {
     const [tab, setTab] = useState('inventory'); // 'inventory' | 'requests' | 'wastage' (FR6)
     const [timber, setTimber] = useState([]);
@@ -123,8 +130,9 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
 
         setSubmittingReq(true);
         try {
-            await api.requestAddTimber({ type: cleanType, size: `${diam}x${len}`, qty, price });
-            setMsg({ text: `Request to add ${qty} units of ${cleanType} (${diam}x${len}) submitted!`, type: 'success' });
+            const normalizedDim = `${diam}x${len} ft`;
+            await api.requestAddTimber({ type: cleanType, size: normalizedDim, qty, price });
+            setMsg({ text: `Request to add ${qty} units of ${cleanType} (${normalizedDim}) submitted!`, type: 'success' });
             setNType('');
             setNSize('');
             setNQty('');
@@ -298,7 +306,7 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
                                         <option value="">Select timber in stock</option>
                                         {timber.map((t) => (
                                             <option key={t.id || t.timber_id} value={t.id || t.timber_id}>
-                                                {t.type || t.type_name} ({t.size}) : Available: {t.qty ?? t.quantity}
+                                                {t.type || t.type_name} ({formatDim(t.size)}) : Available: {t.qty ?? t.quantity}
                                             </option>
                                         ))}
                                     </select>
@@ -331,7 +339,7 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
                                     />
                                     <input
                                         type="text"
-                                        placeholder="Diameter x Length "
+                                        placeholder="Diameter x Length (ft)"
                                         value={nSize}
                                         onChange={(e) => setNSize(e.target.value)}
                                         required
@@ -392,7 +400,7 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
                                                         </span>
                                                     </td>
                                                     <td>
-                                                        {r.type} {r.size}
+                                                        {r.type} {formatDim(r.size)}
                                                     </td>
                                                     <td className="r">{r.qty}</td>
                                                     <td>
@@ -480,7 +488,7 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
                                                             <strong>#{a.allocation_id || a.id}</strong>
                                                         </td>
                                                         <td>{a.type}</td>
-                                                        <td>{a.size}</td>
+                                                        <td>{formatDim(a.size)}</td>
                                                         <td className="r">{a.allocated_qty} units</td>
                                                         <td className="r" style={{ color: '#dc2626' }}>
                                                             {a.wasted_qty} ft
@@ -540,7 +548,7 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
                                                         value={a.allocation_id || a.id}
                                                         disabled={Number(a.wasted_qty || 0) > 0 || a.remaining_qty <= 0}
                                                     >
-                                                        Allocation #{a.allocation_id || a.id}: {a.type} ({a.size}) — {Number(a.wasted_qty || 0) > 0 ? 'Wastage Already Allotted' : `${a.remaining_qty} ft available`}
+                                                        Allocation #{a.allocation_id || a.id}: {a.type} ({formatDim(a.size)}) — {Number(a.wasted_qty || 0) > 0 ? 'Wastage Already Allotted' : `${a.remaining_qty} ft available`}
                                                     </option>
                                                 ))}
                                             </select>
@@ -560,7 +568,7 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
                                                 }}
                                             >
                                                 <span>
-                                                    Selected: <strong>{selectedAllocation.type} ({selectedAllocation.size})</strong>
+                                                    Selected: <strong>{selectedAllocation.type} ({formatDim(selectedAllocation.size)})</strong>
                                                     {Number(selectedAllocation.wasted_qty || 0) > 0 && ' — Wastage already allotted'}
                                                 </span>
                                                 <span style={{ color: Number(selectedAllocation.wasted_qty || 0) > 0 ? '#991b1b' : '#047857', fontWeight: 'bold' }}>
@@ -657,7 +665,7 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
                                                 <td>
                                                     <strong>{w.type || w.type_name}</strong>
                                                 </td>
-                                                <td>{w.size || 'Standard'}</td>
+                                                <td>{formatDim(w.size) || 'Standard'}</td>
                                                 <td className="r" style={{ color: '#dc2626', fontWeight: 'bold' }}>
                                                     -{w.qty ?? w.quantity} ft
                                                 </td>

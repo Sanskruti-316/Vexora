@@ -217,7 +217,10 @@ export async function initDb() {
           atr.worker_id,
           NULL::bigint as timber_id,
           tt.type_name as type,
-          atr.timber_code as size,
+          CASE 
+            WHEN atr.timber_code ~* '\s*ft$' THEN atr.timber_code
+            ELSE (atr.timber_code || ' ft')
+          END::varchar as size,
           atr.quantity as qty,
           atr.price,
           atr.status,

@@ -3,6 +3,13 @@ import { processTimberQuery } from '../utils/algorithms';
 
 const rupees = (n) => '₹' + Number(n).toLocaleString('en-IN');
 
+const formatDim = (s) => {
+    if (!s) return '';
+    const str = String(s).trim();
+    if (/\s*ft$/i.test(str)) return str;
+    return `${str} ft`;
+};
+
 export default function InventoryTable({ timber = [] }) {
     const [search, setSearch] = useState('');
     const [sortBy, setSortBy] = useState('type');
@@ -67,7 +74,7 @@ export default function InventoryTable({ timber = [] }) {
                         {rows.map((t) => (
                             <tr key={t.id || t.timber_id}>
                                 <td>{t.type || t.type_name}</td>
-                                <td>{t.size}</td>
+                                <td>{formatDim(t.size)}</td>
                                 <td className="r">{t.qty ?? t.quantity}</td>
                                 <td className="r">{t.min ?? t.min_stock_level ?? 10}</td>
                                 <td className="r">{rupees(t.price)}</td>

@@ -4,6 +4,13 @@ import InventoryTable from './InventoryTable';
 
 const rupees = (n) => '₹' + Number(n || 0).toLocaleString('en-IN');
 
+const formatDim = (s) => {
+    if (!s) return '';
+    const str = String(s).trim();
+    if (/\s*ft$/i.test(str)) return str;
+    return `${str} ft`;
+};
+
 export default function ManagerPage({ onsignout }) {
     const [tab, setTab] = useState('inventory'); // 'inventory' | 'charts' (FR3) | 'requests' (FR2) | 'workers' (FR8) | 'wastage' (FR6) | 'txns' (FR5)
     const [timber, setTimber] = useState([]);
@@ -426,7 +433,7 @@ export default function ManagerPage({ onsignout }) {
                                                     </td>
                                                     <td>{r.kind === 'allocate' ? 'Allocation' : 'Add Timber'}</td>
                                                     <td>
-                                                        {r.type} {r.size}
+                                                        {r.type} {formatDim(r.size)}
                                                     </td>
                                                     <td className="r">{r.qty}</td>
                                                     <td>
@@ -581,7 +588,7 @@ export default function ManagerPage({ onsignout }) {
                                                 <td>
                                                     <strong>{w.type || w.type_name}</strong>
                                                 </td>
-                                                <td>{w.size || 'Standard'}</td>
+                                                <td>{formatDim(w.size) || 'Standard'}</td>
                                                 <td className="r" style={{ color: '#dc2626', fontWeight: 'bold' }}>
                                                     -{w.qty ?? w.quantity} ft
                                                 </td>
