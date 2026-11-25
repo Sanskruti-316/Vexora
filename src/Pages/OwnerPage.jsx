@@ -1,136 +1,615 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { api } from '../api';
+import InventoryTable from './InventoryTable';
 
-const stats = [
-    { label: 'Timber types', value: '100' },
-    { label: 'Invested', value: '₹80,000' },
-    { label: 'Warehouses', value: '3' },
-    { label: 'Managers', value: '3' },
-    { label: 'Workers', value: '10' },
-];
+const rupees = (n) => '₹' + Number(n || 0).toLocaleString('en-IN');
 
-const inventory = [
-    { type: 'Teak', warehouse: 'Gokul Manufacturing', qty: 100, dim: '10x10', cost: 10000, manager: 'Mallikarjun P' },
-    { type: 'Rosewood', warehouse: 'Keshwapur Works', qty: 50, dim: '5x5', cost: 50000, manager: 'Rajesh T' },
-    { type: 'Mahogany', warehouse: 'Gokul Manufacturing', qty: 30, dim: '3x3', cost: 5000, manager: 'Mallikarjun P' },
-    { type: 'Oak', warehouse: 'Silver Town Woods', qty: 20, dim: '2x2', cost: 15000, manager: 'Shivam D' },
-];
-
-const managers = [
-    { name: 'Mallikarjun P', email: 'mallikarjun@example.com', phone: '+91 8951560323', warehouse: 'Gokul Manufacturing', revenue: 10000 },
-    { name: 'Rajesh T', email: 'rajesh@example.com', phone: '+91 7338039208', warehouse: 'Keshwapur Works', revenue: 15000 },
-    { name: 'Shivam D', email: 'shivam@example.com', phone: '+91 9481857729', warehouse: 'Silver Town Woods', revenue: 25000 },
-];
-
-const rupees = (n) => '₹' + n.toLocaleString('en-IN');
-function searchInventory(list, text) {
-    const q = text.toLowerCase().trim();
-
-    return list.filter(
-        (r) =>
-            r.type.toLowerCase().includes(q) ||
-            r.warehouse.toLowerCase().includes(q) ||
-            r.manager.toLowerCase().includes(q)
-    );
-}
 export default function OwnerPage({ onsignout }) {
-    const [search, setSearch] = useState('');
-const rows = searchInventory(inventory, search);
+    const [tab, setTab] = useState('analytics'); // 'analytics' | 'inventory' | 'users' | 'txns'
+    const [stats, setStats] = useState(null);
+    const [users, setUsers] = useState([]);
+    const [timber, setTimber] = useState([]);
+    const [txns, setTxns] = useState([]);
+    const [loading, setLoading] = useState(false);
+    const [msg, setMsg] = useState({ text: '', type: '' });
 
-    return (    
+    // FR7: Add User Form state
+    const [uName, setUName] = useState('');
+    const [uEmail, setUEmail] = useState('');
+    const [uPhone, setUPhone] = useState('');
+    const [uWarehouse, setUWarehouse] = useState('');
+    const [uPassword, setUPassword] = useState('');
+    const [uRole, setURole] = useState('manager'); // 'manager' | 'worker'
+
+    // Load initial data
+    const loadAllData = async () => {
+        setLoading(true);
+        try {
+            const [dashData, usersData, timberData, txnData] = await Promise.all([
+                api.getDashboardStats().catch(() => null),
+                api.getUsers().catch(() => []),
+                api.getTimber().catch(() => []),
+                api.getTransactions().catch(() => []),
+            ]);
+            if (dashData) setStats(dashData);
+            if (Array.isArray(usersData)) setUsers(usersData);
+            if (Array.isArray(timberData)) setTimber(timberData);
+            if (Array.isArray(txnData)) setTxns(txnData);
+        } catch (err) {
+            console.error('Error loading owner data:', err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        loadAllData();
+    }, []);
+
+    // FR7: Owner creates a manager or worker account
+    const handleAddUser = async (e) => {
+        e.preventDefault();
+        setMsg({ text: '', type: '' });
+
+        if (!uName.trim() || !uEmail.trim() || !uPassword.trim()) {
+            return setMsg({ text: 'Name, email, and password are required', type: 'error' });
+        }
+        if (uRole === 'manager' && !uWarehouse.trim()) {
+            return setMsg({ text: 'Warehouse name that the manager belongs to is required', type: 'error' });
+        }
+        if (uPassword.length < 6) {
+            return setMsg({ text: 'Password must be at least 6 characters', type: 'error' });
+        }
+
+        try {
+            await api.createUser({
+                name: uName.trim(),
+                email: uEmail.trim(),
+                phone: uPhone.trim() || '+91 9999900000',
+                password: uPassword,
+                role: uRole,
+                warehouse: uWarehouse.trim(),
+                address: uWarehouse.trim(),
+            });
+            setMsg({ text: `${uRole.toUpperCase()} account created successfully!`, type: 'success' });
+            setUName('');
+            setUEmail('');
+            setUPhone('');
+            setUWarehouse('');
+            setUPassword('');
+            const updatedUsers = await api.getUsers();
+            setUsers(updatedUsers);
+        } catch (err) {
+            setMsg({ text: err.message || 'Failed to create user', type: 'error' });
+        }
+    };
+
+    // FR7: Owner deletes a manager or worker account
+    const handleDeleteUser = async (userId, userName, role) => {
+        if (!window.confirm(`Are you sure you want to delete ${role} '${userName}'?`)) return;
+        try {
+            await api.deleteUser(userId);
+            setMsg({ text: `Removed ${role} '${userName}' successfully.`, type: 'success' });
+            setUsers((prev) => prev.filter((u) => u.id !== userId));
+        } catch (err) {
+            setMsg({ text: err.message || 'Failed to delete user', type: 'error' });
+        }
+    };
+
+    const managers = users.filter((u) => u.role === 'manager');
+    const workers = users.filter((u) => u.role === 'worker');
+
+    // Chart calculations for FR3
+    const stockItems = stats?.stockByType || [];
+    const totalQty = stockItems.reduce((acc, s) => acc + Number(s.qty || 0), 0);
+    const totalValue = stockItems.reduce((acc, s) => acc + Number(s.value || 0), 0);
+
+    const tabs = [
+        ['analytics', 'Charts & Analytics'],
+        ['inventory', 'Timber Stock'],
+        ['users', 'Manage Accounts'],
+        ['txns', 'Transactions'],
+    ];
+
+    return (
         <div className="op">
             <header id="head">
                 <div id="two">
-                    {/* <div id="hone"> */}
-
                     <div id="symbol">DT</div>
-                    <div id="name1"><div id="name3">Durga </div><div id="name2">Timbers</div></div>
-
-                    {/* </div> */}
+                    <div id="name1">
+                        <div id="name3">Durga </div>
+                        <div id="name2">Timbers</div>
+                    </div>
                 </div>
                 <div className="opright">
-                    <button className="opbtn" onClick={onsignout}>Sign Out</button>
+                    <span className="opwho" style={{ marginRight: '15px', color: '#555' }}>
+                        Logged in as: <strong>Owner</strong>
+                    </span>
+                    <button className="opbtn" style={{ color: 'white', backgroundColor: '#8a1f1f' }} onClick={onsignout}>
+                        Sign Out
+                    </button>
                 </div>
             </header>
 
             <main className="opmain">
+                {/* Real-time KPI Statistics Bar */}
                 <aside className="opstats">
-                    {stats.map((s) => (
-                        <div className="opstat" key={s.label}>
-                            <div className="opnum">{s.value}</div>
-                            <div className="oplbl">{s.label}</div>
+                    <div className="opstat">
+                        <div className="opnum">{stats?.totals?.types ?? timber.length}</div>
+                        <div className="oplbl">Timber Types</div>
+                    </div>
+                    <div className="opstat">
+                        <div className="opnum">{stats?.totals?.units ?? timber.reduce((a, b) => a + Number(b.qty || 0), 0)}</div>
+                        <div className="oplbl">Units in Stock</div>
+                    </div>
+                    <div className="opstat">
+                        <div className="opnum" style={{ fontSize: '1.25rem' }}>
+                            {rupees(stats?.totals?.value ?? timber.reduce((a, b) => a + (Number(b.qty || 0) * Number(b.price || 0)), 0))}
                         </div>
-                    ))}
+                        <div className="oplbl">Total Valuation</div>
+                    </div>
+                    <div className="opstat">
+                        <div className="opnum" style={{ color: (stats?.totals?.low ?? 0) > 0 ? '#b91c1c' : '#15803d' }}>
+                            {stats?.totals?.low ?? 0}
+                        </div>
+                        <div className="oplbl">Low Stock Types</div>
+                    </div>
+                    <div className="opstat">
+                        <div className="opnum">{managers.length}</div>
+                        <div className="oplbl">Managers</div>
+                    </div>
+                    <div className="opstat">
+                        <div className="opnum">{workers.length}</div>
+                        <div className="oplbl">Workers</div>
+                    </div>
                 </aside>
 
                 <div className="opcontent">
-                    <div className="ophead">
-                        <h2>Inventory</h2>
-                        <input
-                            type="text"
-                            placeholder="Search..."
-                            value={search}
-                            onChange={(e) => setSearch(e.target.value)}
-                        />
-                    </div>
-                    <div className="opscroll">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Timber</th>
-                                    <th>Warehouse</th>
-                                    <th className="r">Qty</th>
-                                    <th>Size</th>
-                                    <th className="r">Cost</th>
-                                    <th>Manager</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {rows.length === 0 && (
-                                    <tr><td colSpan="6" className="opempty">Nothing found</td></tr>
-                                )}
-                                {rows.map((r) => (
-                                    <tr key={r.type + r.warehouse}>
-                                        <td>{r.type}</td>
-                                        <td>{r.warehouse}</td>
-                                        <td className="r">
-                                            {r.qty}
-                                        </td>
-                                        <td>{r.dim}</td>
-                                        <td className="r">{rupees(r.cost)}</td>
-                                        <td>{r.manager}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                    {/* Navigation Tabs */}
+                    <div className="rptabs" style={{ marginBottom: '20px' }}>
+                        {tabs.map(([k, label]) => (
+                            <button
+                                key={k}
+                                className={tab === k ? 'on' : ''}
+                                onClick={() => {
+                                    setTab(k);
+                                    setMsg({ text: '', type: '' });
+                                }}
+                            >
+                                {label}
+                            </button>
+                        ))}
                     </div>
 
-                    <div className="ophead">
-                        <h2>Managers</h2>
-                    </div>
-                    <div className="opscroll">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Name</th>
-                                    <th>Email</th>
-                                    <th>Phone</th>
-                                    <th>Warehouse</th>
-                                    <th className="r">Revenue</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {managers.map((m) => (
-                                    <tr key={m.email}>
-                                        <td>{m.name}</td>
-                                        <td>{m.email}</td>
-                                        <td>{m.phone}</td>
-                                        <td>{m.warehouse}</td>
-                                        <td className="r">{rupees(m.revenue)}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
+                    {msg.text && (
+                        <div
+                            className="rpmsg"
+                            style={{
+                                padding: '12px',
+                                borderRadius: '6px',
+                                marginBottom: '15px',
+                                backgroundColor: msg.type === 'error' ? '#fee2e2' : '#dcfce7',
+                                color: msg.type === 'error' ? '#991b1b' : '#166534',
+                                border: `1px solid ${msg.type === 'error' ? '#f87171' : '#86efac'}`,
+                            }}
+                        >
+                            {msg.text}
+                        </div>
+                    )}
+
+                    {/* FR3: DASHBOARD DISPLAYING INVENTORY STATISTICS USING CHARTS */}
+                    {tab === 'analytics' && (
+                        <div className="analytics-section">
+                            <div className="ophead">
+                                <h2>Inventory Statistics & Graphical Visualizations</h2>
+                                <button className="rpbtn grey" onClick={loadAllData} disabled={loading}>
+                                    {loading ? 'Refreshing...' : 'Refresh Data'}
+                                </button>
+                            </div>
+
+                            {/* Chart 1: Stock Quantity Distribution by Timber Type */}
+                            <div
+                                style={{
+                                    background: '#ffffff',
+                                    border: '1px solid #e2e8f0',
+                                    borderRadius: '8px',
+                                    padding: '20px',
+                                    marginBottom: '25px',
+                                    boxShadow: '0 2px 4px rgba(0,0,0,0.04)',
+                                }}
+                            >
+                                <h3 style={{ margin: '0 0 15px 0', color: '#1e293b' }}>
+                                    Stock Volume by Timber Type (Quantity in CFT)
+                                </h3>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                                    {stockItems.length === 0 && <p className="opempty">No timber stock recorded yet.</p>}
+                                    {stockItems.map((item) => {
+                                        const pct = totalQty > 0 ? Math.round((Number(item.qty || 0) / totalQty) * 100) : 0;
+                                        return (
+                                            <div key={item.type}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '14px' }}>
+                                                    <span style={{ fontWeight: '600', color: '#334155' }}>{item.type}</span>
+                                                    <span style={{ fontWeight: 'bold', color: '#0f172a' }}>{item.qty} units</span>
+                                                </div>
+                                                <div style={{ width: '100%', backgroundColor: '#f1f5f9', borderRadius: '6px', height: '22px', overflow: 'hidden' }}>
+                                                    <div
+                                                        style={{
+                                                            width: `${Math.max(pct, 4)}%`,
+                                                            height: '100%',
+                                                            backgroundColor: '#8a1f1f',
+                                                            borderRadius: '6px',
+                                                            transition: 'width 0.6s ease',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'flex-end',
+                                                            paddingRight: '8px',
+                                                            color: 'white',
+                                                            fontSize: '11px',
+                                                            fontWeight: 'bold',
+                                                        }}
+                                                    >
+                                                        {pct}%
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {/* Chart 2: Inventory Value Distribution by Species */}
+                            <div
+                                style={{
+                                    background: '#ffffff',
+                                    border: '1px solid #e2e8f0',
+                                    borderRadius: '8px',
+                                    padding: '20px',
+                                    marginBottom: '25px',
+                                    boxShadow: '0 2px 4px rgba(0,0,0,0.04)',
+                                }}
+                            >
+                                <h3 style={{ margin: '0 0 15px 0', color: '#1e293b' }}>
+                                    Stock Valuation Distribution (Investment per Species in Rupees)
+                                </h3>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                                    {stockItems.map((item) => {
+                                        const pctVal = totalValue > 0 ? Math.round((Number(item.value || 0) / totalValue) * 100) : 0;
+                                        return (
+                                            <div key={item.type}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '14px' }}>
+                                                    <span style={{ fontWeight: '600', color: '#334155' }}>{item.type}</span>
+                                                    <span style={{ fontWeight: 'bold', color: '#15803d' }}>{rupees(item.value)}</span>
+                                                </div>
+                                                <div style={{ width: '100%', backgroundColor: '#f1f5f9', borderRadius: '6px', height: '22px', overflow: 'hidden' }}>
+                                                    <div
+                                                        style={{
+                                                            width: `${Math.max(pctVal, 4)}%`,
+                                                            height: '100%',
+                                                            backgroundColor: '#047857',
+                                                            borderRadius: '6px',
+                                                            transition: 'width 0.6s ease',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'flex-end',
+                                                            paddingRight: '8px',
+                                                            color: 'white',
+                                                            fontSize: '11px',
+                                                            fontWeight: 'bold',
+                                                        }}
+                                                    >
+                                                        {pctVal}%
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {/* Chart 3: Request Status Graphical Breakdown */}
+                            <div
+                                style={{
+                                    background: '#ffffff',
+                                    border: '1px solid #e2e8f0',
+                                    borderRadius: '8px',
+                                    padding: '20px',
+                                    boxShadow: '0 2px 4px rgba(0,0,0,0.04)',
+                                }}
+                            >
+                                <h3 style={{ margin: '0 0 15px 0', color: '#1e293b' }}>
+                                    Request Status Graphical Representation
+                                </h3>
+                                <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+                                    {(stats?.requestsByStatus || []).map((r) => {
+                                        const isPending = r.status.toUpperCase() === 'PENDING';
+                                        const isApproved = ['APPROVED', 'ACCEPTED'].includes(r.status.toUpperCase());
+                                        const color = isPending ? '#d97706' : isApproved ? '#16a34a' : '#dc2626';
+                                        const bg = isPending ? '#fef3c7' : isApproved ? '#dcfce7' : '#fee2e2';
+                                        return (
+                                            <div
+                                                key={r.status}
+                                                style={{
+                                                    flex: '1 1 200px',
+                                                    padding: '16px',
+                                                    backgroundColor: bg,
+                                                    border: `1px solid ${color}`,
+                                                    borderRadius: '8px',
+                                                    textAlign: 'center',
+                                                }}
+                                            >
+                                                <div style={{ fontSize: '28px', fontWeight: 'bold', color }}>{r.count}</div>
+                                                <div style={{ fontWeight: '600', color: '#1e293b', marginTop: '4px' }}>{r.status} Requests</div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Timber Stock Tab */}
+                    {tab === 'inventory' && <InventoryTable timber={timber} />}
+
+                    {/* FR7: THE SYSTEM SHALL ALLOW THE OWNER TO ADD AND DELETE ACCOUNTS */}
+                    {tab === 'users' && (
+                        <div className="users-management-section">
+                            <div className="ophead">
+                                <h2>Account Management</h2>
+                            </div>
+
+                            {/* Add Account Form */}
+                            <div
+                                style={{
+                                    background: '#ffffff',
+                                    border: '1px solid #e2e8f0',
+                                    borderRadius: '8px',
+                                    padding: '20px',
+                                    marginBottom: '30px',
+                                    boxShadow: '0 2px 4px rgba(0,0,0,0.04)',
+                                }}
+                            >
+                                <h3 style={{ margin: '0 0 15px 0', color: '#1e293b' }}>Add Manager or Worker Account</h3>
+                                <form
+                                    onSubmit={handleAddUser}
+                                    style={{
+                                        display: 'grid',
+                                        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                                        gap: '12px',
+                                        alignItems: 'end',
+                                    }}
+                                >
+                                    <div>
+                                        <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '4px' }}>
+                                            Role
+                                        </label>
+                                        <select
+                                            value={uRole}
+                                            onChange={(e) => setURole(e.target.value)}
+                                            style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #cbd5e1' }}
+                                        >
+                                            <option value="manager">Warehouse Manager</option>
+                                            <option value="worker">Mill Worker</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '4px' }}>
+                                            Full Name
+                                        </label>
+                                        <input
+                                            type="text"
+                                            placeholder="e.g. Ramesh K"
+                                            value={uName}
+                                            onChange={(e) => setUName(e.target.value)}
+                                            required
+                                            style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #cbd5e1' }}
+                                        />
+                                    </div>
+                                    {uRole === 'manager' && (
+                                        <div>
+                                            <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '4px' }}>
+                                                Belonging Warehouse
+                                            </label>
+                                            <input
+                                                type="text"
+                                                placeholder="e.g. Warehouse A, Central Yard"
+                                                value={uWarehouse}
+                                                onChange={(e) => setUWarehouse(e.target.value)}
+                                                required
+                                                style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #cbd5e1' }}
+                                            />
+                                        </div>
+                                    )}
+                                    <div>
+                                        <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '4px' }}>
+                                            Email Address
+                                        </label>
+                                        <input
+                                            type="email"
+                                            placeholder="ramesh@example.com"
+                                            value={uEmail}
+                                            onChange={(e) => setUEmail(e.target.value)}
+                                            required
+                                            style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #cbd5e1' }}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '4px' }}>
+                                            Phone Number
+                                        </label>
+                                        <input
+                                            type="tel"
+                                            placeholder="+91 9876543210"
+                                            value={uPhone}
+                                            onChange={(e) => setUPhone(e.target.value)}
+                                            style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #cbd5e1' }}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '4px' }}>
+                                            Password (min 6 chars)
+                                        </label>
+                                        <input
+                                            type="password"
+                                            placeholder="Password"
+                                            value={uPassword}
+                                            onChange={(e) => setUPassword(e.target.value)}
+                                            required
+                                            style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #cbd5e1' }}
+                                        />
+                                    </div>
+                                    <div>
+                                        <button className="rpbtn" type="submit" style={{ width: '100%', padding: '9px 16px' }}>
+                                            Create Account
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+
+                            {/* Managers Table with Delete Action */}
+                            <div className="ophead" style={{ marginTop: '20px' }}>
+                                <h3>Warehouse Managers ({managers.length})</h3>
+                            </div>
+                            <div className="opscroll" style={{ marginBottom: '30px' }}>
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>ID</th>
+                                            <th>Name</th>
+                                            <th>Belonging Warehouse</th>
+                                            <th>Email</th>
+                                            <th>Phone</th>
+                                            <th>Role</th>
+                                            <th style={{ textAlign: 'center' }}>Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {managers.length === 0 && (
+                                            <tr>
+                                                <td colSpan="7" className="opempty">
+                                                    No managers found
+                                                </td>
+                                            </tr>
+                                        )}
+                                        {managers.map((m) => (
+                                            <tr key={m.id}>
+                                                <td>{m.id}</td>
+                                                <td>
+                                                    <strong>{m.name}</strong>
+                                                </td>
+                                                <td>
+                                                    <span style={{ fontWeight: '600', color: '#1e3a8a' }}>{m.warehouse || m.address || 'Standard Warehouse'}</span>
+                                                </td>
+                                                <td>{m.email}</td>
+                                                <td>{m.phone || 'N/A'}</td>
+                                                <td>
+                                                    <span className="rptag ok">Manager</span>
+                                                </td>
+                                                <td style={{ textAlign: 'center' }}>
+                                                    <button
+                                                        className="rpbtn grey"
+                                                        style={{ backgroundColor: '#dc2626', color: 'white', padding: '4px 10px' }}
+                                                        onClick={() => handleDeleteUser(m.id, m.name, 'manager')}
+                                                    >
+                                                        Delete
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            {/* Workers Table with Delete Action */}
+                            <div className="ophead">
+                                <h3>Mill Workers ({workers.length})</h3>
+                            </div>
+                            <div className="opscroll">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>ID</th>
+                                            <th>Name</th>
+                                            <th>Email</th>
+                                            <th>Phone</th>
+                                            <th>Role</th>
+                                            <th style={{ textAlign: 'center' }}>Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {workers.length === 0 && (
+                                            <tr>
+                                                <td colSpan="6" className="opempty">
+                                                    No workers found
+                                                </td>
+                                            </tr>
+                                        )}
+                                        {workers.map((w) => (
+                                            <tr key={w.id}>
+                                                <td>{w.id}</td>
+                                                <td>
+                                                    <strong>{w.name}</strong>
+                                                </td>
+                                                <td>{w.email}</td>
+                                                <td>{w.phone || 'N/A'}</td>
+                                                <td>
+                                                    <span className="rptag warn">Worker</span>
+                                                </td>
+                                                <td style={{ textAlign: 'center' }}>
+                                                    <button
+                                                        className="rpbtn grey"
+                                                        style={{ backgroundColor: '#dc2626', color: 'white', padding: '4px 10px' }}
+                                                        onClick={() => handleDeleteUser(w.id, w.name, 'worker')}
+                                                    >
+                                                        Delete
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Transactions History Tab */}
+                    {tab === 'txns' && (
+                        <>
+                            <div className="ophead">
+                                <h2>Transaction History</h2>
+                            </div>
+                            <div className="opscroll">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Date</th>
+                                            <th>Action / Kind</th>
+                                            <th>Timber Type</th>
+                                            <th className="r">Qty</th>
+                                            <th>Performed By</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {txns.length === 0 && (
+                                            <tr>
+                                                <td colSpan="5" className="opempty">
+                                                    No transactions recorded
+                                                </td>
+                                            </tr>
+                                        )}
+                                        {txns.map((t) => (
+                                            <tr key={t.id}>
+                                                <td>{t.date ? String(t.date).slice(0, 10) : 'N/A'}</td>
+                                                <td>{t.kind}</td>
+                                                <td>{t.type}</td>
+                                                <td className="r">{t.qty}</td>
+                                                <td>{t.by}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </>
+                    )}
                 </div>
             </main>
         </div>
