@@ -75,6 +75,16 @@ export default function OwnerPage({ onsignout }) {
         if (uPassword.length < 6) {
             return setMsg({ text: 'Password must be at least 6 characters', type: 'error' });
         }
+        if (uPhone && uPhone.trim()) {
+            const rawPhone = uPhone.trim();
+            if (/^-/.test(rawPhone) || (rawPhone.includes("-") && !/^\+?\d+[\-\s]?\d+$/.test(rawPhone))) {
+                return setMsg({ text: 'Phone number cannot be negative or contain invalid characters', type: 'error' });
+            }
+            const cleanedPhone = rawPhone.replace(/[\s\-\(\)]/g, "");
+            if (!/^\+?[1-9]\d{9,14}$/.test(cleanedPhone)) {
+                return setMsg({ text: 'Invalid phone number. Must be a valid 10 to 15 digit number (e.g. +91 9876543210)', type: 'error' });
+            }
+        }
 
         try {
             await api.createUser({

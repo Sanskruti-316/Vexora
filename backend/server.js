@@ -66,6 +66,30 @@ const posFloat = (v, msg = "Invalid quantity") => {
   return n;
 };
 
+// Helper to validate phone number and reject negative or malformed inputs
+const validatePhone = (v, defaultPhone = "+91 9999900000") => {
+  if (!v) return defaultPhone;
+  const raw = String(v).trim();
+  if (!raw) return defaultPhone;
+
+  // Disallow negative numbers or minus sign (e.g. "-1")
+  if (/^-/.test(raw) || (raw.includes("-") && !/^\+?\d+[\-\s]?\d+$/.test(raw))) {
+    const err = new Error("Phone number cannot be negative or contain invalid characters");
+    err.status = 400;
+    throw err;
+  }
+
+  // Strip spaces, hyphens, and parentheses
+  const cleaned = raw.replace(/[\s\-\(\)]/g, "");
+  // Must be valid phone number with 10 to 15 digits (optionally prefixed by +)
+  if (!/^\+?[1-9]\d{9,14}$/.test(cleaned)) {
+    const err = new Error("Invalid phone number. Must be a valid positive 10 to 15 digit number (e.g. +91 9876543210 or 9876543210)");
+    err.status = 400;
+    throw err;
+  }
+  return raw;
+};
+
 // Database transaction helper
 async function tx(fn) {
   const client = await pool.connect();
@@ -224,7 +248,7 @@ const handleRegisterOwner = async (req, res) => {
   if (pool.hasEnterpriseSchema) {
     const ins = await pool.query(
       "INSERT INTO owner (name, email, phone, address, password_hash, is_active) VALUES ($1, $2, $3, $4, $5, true) RETURNING owner_id as id, name, email",
-      [name.trim(), cleanedEmail, phone ? phone.trim() : "+91 9999999999", address ? address.trim() : "Headquarters", hash]
+      [name.trim(), cleanedEmail, validatePhone(phone, "+91 9999999999"), address ? address.trim() : "Headquarters", hash]
     );
     newOwner = ins.rows[0];
   } else {
@@ -1420,7 +1444,7 @@ app.post(
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
-    const userPhone = phone ? String(phone).trim() : "+91 9999900000";
+    const userPhone = validatePhone(phone, "+91 9999900000");
     const warehouseInput = (warehouse || address || "").trim();
     if (role === "manager" && !warehouseInput) {
       throw new Error("Warehouse name that the manager belongs to is required");
