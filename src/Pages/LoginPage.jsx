@@ -25,9 +25,18 @@ export default function LoginPage({ onLoginsuccess, onnavtolanding }) {
         setLoading(true);
         try {
             if (isRegister) {
-                if (!name.trim()) {
+                const cleanName = name.trim();
+                if (!cleanName) {
                     setLoading(false);
                     return setError('Full name is required to register as owner');
+                }
+                if (/^\d+$/.test(cleanName) || /^-?\d+$/.test(cleanName) || /[0-9=<>_$%^&*()+!]/.test(cleanName)) {
+                    setLoading(false);
+                    return setError('Name cannot be numbers or symbols. It must be text only (e.g. Ramesh Kumar).');
+                }
+                if (!/^[a-zA-Z][a-zA-Z\s\-\.']{1,99}$/.test(cleanName)) {
+                    setLoading(false);
+                    return setError('Name must start with a letter and contain text only (e.g. Ramesh Kumar).');
                 }
                 if (cleanedpassword.length < 6) {
                     setLoading(false);
@@ -91,7 +100,7 @@ export default function LoginPage({ onLoginsuccess, onnavtolanding }) {
                                     type="text"
                                     placeholder="Enter owner name"
                                     value={name}
-                                    onChange={(e) => setName(e.target.value)}
+                                    onChange={(e) => setName(e.target.value.replace(/[^a-zA-Z\s\-\.']/g, ''))}
                                     required
                                     style={{
                                         padding: '8px',

@@ -110,6 +110,12 @@ export default function ManagerPage({ onsignout }) {
         if (!name || !email) {
             return setMsg({ text: 'Name and email are required', type: 'error' });
         }
+        if (/^\d+$/.test(name) || /^-?\d+$/.test(name) || /[0-9=<>_$%^&*()+!]/.test(name)) {
+            return setMsg({ text: 'Name cannot be numbers or symbols. It must be text only (e.g. Ramesh Kumar).', type: 'error' });
+        }
+        if (!/^[a-zA-Z][a-zA-Z\s\-\.']{1,99}$/.test(name)) {
+            return setMsg({ text: 'Name must start with a letter and contain text only (e.g. Ramesh Kumar).', type: 'error' });
+        }
         if (!password || password.length < 6) {
             return setMsg({ text: 'Password must be at least 6 characters long', type: 'error' });
         }
@@ -505,7 +511,7 @@ export default function ManagerPage({ onsignout }) {
                                     type="text"
                                     placeholder="Worker Name"
                                     value={wName}
-                                    onChange={(e) => setWName(e.target.value)}
+                                    onChange={(e) => setWName(e.target.value.replace(/[^a-zA-Z\s\-\.']/g, ''))}
                                     required
                                     autoComplete="off"
                                 />

@@ -66,11 +66,28 @@ export default function OwnerPage({ onsignout }) {
         e.preventDefault();
         setMsg({ text: '', type: '' });
 
-        if (!uName.trim() || !uEmail.trim() || !uPassword.trim()) {
+        const cleanName = uName.trim();
+        if (!cleanName || !uEmail.trim() || !uPassword.trim()) {
             return setMsg({ text: 'Name, email, and password are required', type: 'error' });
         }
-        if (uRole === 'manager' && !uWarehouse.trim()) {
-            return setMsg({ text: 'Warehouse name that the manager belongs to is required', type: 'error' });
+        if (/^\d+$/.test(cleanName) || /^-?\d+$/.test(cleanName) || /[0-9=<>_$%^&*()+!]/.test(cleanName)) {
+            return setMsg({ text: 'Name cannot be numbers or symbols. It must be text only (e.g. Ramesh Kumar).', type: 'error' });
+        }
+        if (!/^[a-zA-Z][a-zA-Z\s\-\.']{1,99}$/.test(cleanName)) {
+            return setMsg({ text: 'Name must start with a letter and contain text only (e.g. Ramesh Kumar).', type: 'error' });
+        }
+
+        if (uRole === 'manager') {
+            const cleanWh = uWarehouse.trim();
+            if (!cleanWh) {
+                return setMsg({ text: 'Warehouse name that the manager belongs to is required', type: 'error' });
+            }
+            if (/^\d+$/.test(cleanWh) || /^-?\d+$/.test(cleanWh) || /[0-9=<>_$%^&*()+!]/.test(cleanWh)) {
+                return setMsg({ text: 'Warehouse name cannot be numbers or symbols. It must be text only (e.g. Gokul Road, Central Yard).', type: 'error' });
+            }
+            if (!/^[a-zA-Z][a-zA-Z\s\-\.]{1,99}$/.test(cleanWh)) {
+                return setMsg({ text: 'Warehouse name must start with a letter and contain text only (e.g. Gokul Road, Central Yard).', type: 'error' });
+            }
         }
         if (uPassword.length < 6) {
             return setMsg({ text: 'Password must be at least 6 characters', type: 'error' });
@@ -440,7 +457,7 @@ export default function OwnerPage({ onsignout }) {
                                             type="text"
                                             placeholder="e.g. Ramesh K"
                                             value={uName}
-                                            onChange={(e) => setUName(e.target.value)}
+                                            onChange={(e) => setUName(e.target.value.replace(/[^a-zA-Z\s\-\.']/g, ''))}
                                             required
                                             autoComplete="off"
                                             style={{
@@ -465,7 +482,7 @@ export default function OwnerPage({ onsignout }) {
                                                 type="text"
                                                 placeholder="e.g. Warehouse A, Central Yard"
                                                 value={uWarehouse}
-                                                onChange={(e) => setUWarehouse(e.target.value)}
+                                                onChange={(e) => setUWarehouse(e.target.value.replace(/[^a-zA-Z\s\-\.]/g, ''))}
                                                 required
                                                 autoComplete="off"
                                                 style={{

@@ -101,7 +101,7 @@ async function tx(fn) {
   } catch (err) {
     try {
       await client.query("ROLLBACK");
-    } catch {}
+    } catch { }
     throw err;
   } finally {
     if (client.release) client.release();
@@ -230,6 +230,10 @@ const handleRegisterOwner = async (req, res) => {
   const { name, email, password, phone, address } = req.body;
   if (!name || !email || !password) {
     return res.status(400).json({ error: "Name, email, and password are required" });
+  }
+  const cleanName = String(name || "").trim();
+  if (/^\d+$/.test(cleanName) || /^-?\d+$/.test(cleanName) || /[0-9=<>_$%^&*()+!]/.test(cleanName) || !/^[a-zA-Z][a-zA-Z\s\-\.']{1,99}$/.test(cleanName)) {
+    return res.status(400).json({ error: "Name cannot be numbers or symbols. It must be text only (e.g. Ramesh Kumar)." });
   }
   if (String(password).length < 6) {
     return res.status(400).json({ error: "Password must be at least 6 characters long" });
@@ -1001,10 +1005,10 @@ app.post(
     const workerRequests = Array.isArray(req.body.requests) && req.body.requests.length > 0
       ? req.body.requests
       : [
-          { worker: "Worker 1", qty: 17 },
-          { worker: "Worker 2", qty: 3 },
-          { worker: "Worker 3", qty: 20 },
-        ];
+        { worker: "Worker 1", qty: 17 },
+        { worker: "Worker 2", qty: 3 },
+        { worker: "Worker 3", qty: 20 },
+      ];
 
     const testMutex = new StockMutexLock();
     let currentStock = totalUnits;
@@ -1446,6 +1450,14 @@ app.post(
       throw new Error("Name, valid email, and password of at least 6 characters are required");
     }
 
+    const cleanName = String(name || "").trim();
+    if (/^\d+$/.test(cleanName) || /^-?\d+$/.test(cleanName) || /[0-9=<>_$%^&*()+!]/.test(cleanName)) {
+      throw new Error("Name cannot be numbers or symbols. It must be text only (e.g. Ramesh Kumar).");
+    }
+    if (!/^[a-zA-Z][a-zA-Z\s\-\.']{1,99}$/.test(cleanName)) {
+      throw new Error("Name must start with a letter and contain text only (e.g. Ramesh Kumar).");
+    }
+
     const cleanEmail = email.toLowerCase().trim();
     const existing = await pool.query("SELECT id FROM users WHERE email = $1", [cleanEmail]);
     if (existing.rows.length > 0) {
@@ -1455,8 +1467,16 @@ app.post(
     const passwordHash = await bcrypt.hash(password, 10);
     const userPhone = validatePhone(phone, "+91 9999900000");
     const warehouseInput = (warehouse || address || "").trim();
-    if (role === "manager" && !warehouseInput) {
-      throw new Error("Warehouse name that the manager belongs to is required");
+    if (role === "manager") {
+      if (!warehouseInput) {
+        throw new Error("Warehouse name that the manager belongs to is required");
+      }
+      if (/^\d+$/.test(warehouseInput) || /^-?\d+$/.test(warehouseInput) || /[0-9=<>_$%^&*()+!]/.test(warehouseInput)) {
+        throw new Error("Warehouse name cannot be numbers or symbols. It must be text only (e.g. Gokul Road, Central Yard).");
+      }
+      if (!/^[a-zA-Z][a-zA-Z\s\-\.]{1,99}$/.test(warehouseInput)) {
+        throw new Error("Warehouse name must start with a letter and contain text only (e.g. Gokul Road, Central Yard).");
+      }
     }
     const userAddress = warehouseInput || (role === "manager" ? "Main Warehouse" : "Durga Timbers Hubli");
 
