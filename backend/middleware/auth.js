@@ -53,3 +53,5 @@ export function auth(...roles) {
     }
   };
 }
+
+export default auth;
