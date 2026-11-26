@@ -108,6 +108,9 @@ async function tx(fn) {
   }
 }
 
+// ==========================================
+// FR9: AUTOMATED LOW-STOCK MONITORING (Background Daemon)
+// ==========================================
 export async function checkLow(db = pool) {
   try {
     if (pool.hasEnterpriseSchema) {
@@ -181,7 +184,9 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
-// Authentication and Login
+// ==========================================
+// FR1: AUTHENTICATION & LOGIN
+// ==========================================
 const handleLogin = async (req, res) => {
   const email = String(req.body.email || "").toLowerCase().trim();
   const password = String(req.body.password || "").trim();
@@ -281,7 +286,9 @@ app.get("/api/auth/me", auth(), (req, res) => {
   res.json({ user: req.user });
 });
 
-// Inventory Statistics and Dashboard Analytics
+// ==========================================
+// FR3: INVENTORY STATISTICS & DASHBOARD (Charts & Analytics)
+// ==========================================
 app.get(
   "/api/dashboard",
   auth("owner", "manager", "worker"),
@@ -387,6 +394,9 @@ app.get(
   })
 );
 
+// ==========================================
+// FR4: TIMBER SEARCH, VIEW, SORT, AND FILTER (DSA Pipeline)
+// ==========================================
 // Timber query and search pipeline
 async function fetchAllTimberRecords() {
   if (pool.hasEnterpriseSchema) {
@@ -538,7 +548,9 @@ app.patch(
   })
 );
 
-// Requests and Allocations
+// ==========================================
+// FR2: REQUESTS & ALLOCATIONS (Worker Requests & Manager Approvals)
+// ==========================================
 // 1. Submit request (Worker)
 app.post(
   "/api/requests",
@@ -933,7 +945,9 @@ app.post(
   })
 );
 
-// Transaction History
+// ==========================================
+// FR5: TRANSACTION HISTORY (Audit Trail)
+// ==========================================
 app.get(
   "/api/txns",
   auth("manager", "owner"),
@@ -1071,7 +1085,9 @@ app.post(
   })
 );
 
-// Timber Wastage Management
+// ==========================================
+// FR6: TIMBER WASTAGE MANAGEMENT (Worker Allocation Wastage)
+// ==========================================
 // Worker fetches timber allocated to them
 app.get(
   "/api/allocations/mine",
@@ -1393,6 +1409,10 @@ async function resequenceAccounts() {
   }
 }
 
+// ==========================================
+// FR7: OWNER ACCOUNT MANAGEMENT (Add / Delete Managers & Workers)
+// FR8: MANAGER ACCOUNT MANAGEMENT (Add / Remove Workers)
+// ==========================================
 // 1. List manageable users
 app.get(
   "/api/users",
@@ -1602,7 +1622,9 @@ app.delete(
   })
 );
 
-// Stock Notifications
+// ==========================================
+// FR9: MINIMUM STOCK LEVEL NOTIFICATIONS (Manager & Owner Alerts)
+// ==========================================
 app.get(
   "/api/notifications",
   auth("manager", "owner"),
