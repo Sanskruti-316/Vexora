@@ -25,13 +25,34 @@ export default function LoginPage({ onLoginsuccess, onnavtolanding }) {
         setLoading(true);
         try {
             if (isRegister) {
-                if (!name.trim()) {
+                const cleanName = name.trim();
+                if (!cleanName) {
                     setLoading(false);
                     return setError('Full name is required to register as owner');
+                }
+                if (/^\d+$/.test(cleanName) || /^-?\d+$/.test(cleanName) || /[0-9=<>_$%^&*()+!]/.test(cleanName)) {
+                    setLoading(false);
+                    return setError('Name cannot be numbers or symbols. It must be text only (e.g. Ramesh Kumar).');
+                }
+                if (!/^[a-zA-Z][a-zA-Z\s\-\.']{1,99}$/.test(cleanName)) {
+                    setLoading(false);
+                    return setError('Name must start with a letter and contain text only (e.g. Ramesh Kumar).');
                 }
                 if (cleanedpassword.length < 6) {
                     setLoading(false);
                     return setError('Password must be at least 6 characters');
+                }
+                if (phone && phone.trim()) {
+                    const rawPhone = phone.trim();
+                    if (/^-/.test(rawPhone) || (rawPhone.includes("-") && !/^\+?\d+[\-\s]?\d+$/.test(rawPhone))) {
+                        setLoading(false);
+                        return setError('Phone number cannot be negative or contain invalid characters');
+                    }
+                    const cleanedPhone = rawPhone.replace(/[\s\-\(\)]/g, "");
+                    if (!/^\+?[1-9]\d{9,14}$/.test(cleanedPhone)) {
+                        setLoading(false);
+                        return setError('Invalid phone number. Must be a valid 10 to 15 digit number (e.g. +91 9876543210)');
+                    }
                 }
                 const res = await api.registerOwner({
                     name: name.trim(),
@@ -79,7 +100,7 @@ export default function LoginPage({ onLoginsuccess, onnavtolanding }) {
                                     type="text"
                                     placeholder="Enter owner name"
                                     value={name}
-                                    onChange={(e) => setName(e.target.value)}
+                                    onChange={(e) => setName(e.target.value.replace(/[^a-zA-Z\s\-\.']/g, ''))}
                                     required
                                     style={{
                                         padding: '8px',

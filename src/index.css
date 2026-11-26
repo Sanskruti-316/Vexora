@@ -349,17 +349,21 @@ td {
   font-size: 14px;
   color: #6b4a3a;
 }
-.opbtn {
+.opbtn,
+.op-btn {
   border: none;
   border-radius: 4px;
   padding: 9px 16px;
   margin: 0;
-  background: brown;
-  color: aliceblue;
-  cursor: pointer;
-}
-.opbtn:hover {
   background: #8a1f1f;
+  color: white;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.opbtn:hover,
+.op-btn:hover {
+  background: #6e1717;
 }
 
 .opmain {

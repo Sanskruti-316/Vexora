@@ -4,6 +4,21 @@ import InventoryTable from './InventoryTable';
 
 const rupees = (n) => '₹' + Number(n || 0).toLocaleString('en-IN');
 
+const consolidateStockByType = (items = []) => {
+    const map = new Map();
+    for (const item of items) {
+        const rawType = String(item.type || item.type_name || 'Timber').trim();
+        const normalizedType = rawType.charAt(0).toUpperCase() + rawType.slice(1);
+        const existing = map.get(normalizedType) || { type: normalizedType, qty: 0, value: 0 };
+        const q = Number(item.qty ?? item.quantity ?? 0);
+        const v = item.value != null ? Number(item.value) : (q * Number(item.price || 0));
+        existing.qty += q;
+        existing.value += v;
+        map.set(normalizedType, existing);
+    }
+    return Array.from(map.values()).sort((a, b) => a.type.localeCompare(b.type));
+};
+
 export default function OwnerPage({ onsignout }) {
     const [tab, setTab] = useState('analytics'); // 'analytics' | 'inventory' | 'users' | 'txns'
     const [stats, setStats] = useState(null);
@@ -13,7 +28,7 @@ export default function OwnerPage({ onsignout }) {
     const [loading, setLoading] = useState(false);
     const [msg, setMsg] = useState({ text: '', type: '' });
 
-    // FR7: Add User Form state
+    // Add User Form state
     const [uName, setUName] = useState('');
     const [uEmail, setUEmail] = useState('');
     const [uPhone, setUPhone] = useState('');
@@ -46,19 +61,46 @@ export default function OwnerPage({ onsignout }) {
         loadAllData();
     }, []);
 
-    // FR7: Owner creates a manager or worker account
+    // Owner creates a manager or worker account
     const handleAddUser = async (e) => {
         e.preventDefault();
         setMsg({ text: '', type: '' });
 
-        if (!uName.trim() || !uEmail.trim() || !uPassword.trim()) {
+        const cleanName = uName.trim();
+        if (!cleanName || !uEmail.trim() || !uPassword.trim()) {
             return setMsg({ text: 'Name, email, and password are required', type: 'error' });
         }
-        if (uRole === 'manager' && !uWarehouse.trim()) {
-            return setMsg({ text: 'Warehouse name that the manager belongs to is required', type: 'error' });
+        if (/^\d+$/.test(cleanName) || /^-?\d+$/.test(cleanName) || /[0-9=<>_$%^&*()+!]/.test(cleanName)) {
+            return setMsg({ text: 'Name cannot be numbers or symbols. It must be text only (e.g. Ramesh Kumar).', type: 'error' });
+        }
+        if (!/^[a-zA-Z][a-zA-Z\s\-\.']{1,99}$/.test(cleanName)) {
+            return setMsg({ text: 'Name must start with a letter and contain text only (e.g. Ramesh Kumar).', type: 'error' });
+        }
+
+        if (uRole === 'manager') {
+            const cleanWh = uWarehouse.trim();
+            if (!cleanWh) {
+                return setMsg({ text: 'Warehouse name that the manager belongs to is required', type: 'error' });
+            }
+            if (/^\d+$/.test(cleanWh) || /^-?\d+$/.test(cleanWh) || /[0-9=<>_$%^&*()+!]/.test(cleanWh)) {
+                return setMsg({ text: 'Warehouse name cannot be numbers or symbols. It must be text only (e.g. Gokul Road, Central Yard).', type: 'error' });
+            }
+            if (!/^[a-zA-Z][a-zA-Z\s\-\.]{1,99}$/.test(cleanWh)) {
+                return setMsg({ text: 'Warehouse name must start with a letter and contain text only (e.g. Gokul Road, Central Yard).', type: 'error' });
+            }
         }
         if (uPassword.length < 6) {
             return setMsg({ text: 'Password must be at least 6 characters', type: 'error' });
+        }
+        if (uPhone && uPhone.trim()) {
+            const rawPhone = uPhone.trim();
+            if (/^-/.test(rawPhone) || (rawPhone.includes("-") && !/^\+?\d+[\-\s]?\d+$/.test(rawPhone))) {
+                return setMsg({ text: 'Phone number cannot be negative or contain invalid characters', type: 'error' });
+            }
+            const cleanedPhone = rawPhone.replace(/[\s\-\(\)]/g, "");
+            if (!/^\+?[1-9]\d{9,14}$/.test(cleanedPhone)) {
+                return setMsg({ text: 'Invalid phone number. Must be a valid 10 to 15 digit number (e.g. +91 9876543210)', type: 'error' });
+            }
         }
 
         try {
@@ -84,23 +126,24 @@ export default function OwnerPage({ onsignout }) {
         }
     };
 
-    // FR7: Owner deletes a manager or worker account
+    // Owner deletes a manager or worker account
     const handleDeleteUser = async (userId, userName, role) => {
         if (!window.confirm(`Are you sure you want to delete ${role} '${userName}'?`)) return;
         try {
-            await api.deleteUser(userId);
+            await api.deleteUser(userId, role);
             setMsg({ text: `Removed ${role} '${userName}' successfully.`, type: 'success' });
-            setUsers((prev) => prev.filter((u) => u.id !== userId));
+            setUsers((prev) => prev.filter((u) => !(u.id === userId && u.role === role)));
         } catch (err) {
             setMsg({ text: err.message || 'Failed to delete user', type: 'error' });
         }
     };
 
-    const managers = users.filter((u) => u.role === 'manager');
-    const workers = users.filter((u) => u.role === 'worker');
+    const managers = users.filter((u) => u.role === 'manager').sort((a, b) => Number(a.id) - Number(b.id));
+    const workers = users.filter((u) => u.role === 'worker').sort((a, b) => Number(a.id) - Number(b.id));
 
-    // Chart calculations for FR3
-    const stockItems = stats?.stockByType || [];
+    // Chart calculations
+    const rawStockSource = (stats?.stockByType && stats.stockByType.length > 0) ? stats.stockByType : timber;
+    const stockItems = consolidateStockByType(rawStockSource);
     const totalQty = stockItems.reduce((acc, s) => acc + Number(s.qty || 0), 0);
     const totalValue = stockItems.reduce((acc, s) => acc + Number(s.value || 0), 0);
 
@@ -125,7 +168,11 @@ export default function OwnerPage({ onsignout }) {
                     <span className="opwho" style={{ marginRight: '15px', color: '#555' }}>
                         Logged in as: <strong>Owner</strong>
                     </span>
-                    <button className="opbtn" style={{ color: 'white', backgroundColor: '#8a1f1f' }} onClick={onsignout}>
+                    <button
+                        className="opbtn"
+                        style={{ color: 'white', backgroundColor: '#8a1f1f', cursor: 'pointer', fontWeight: 'bold' }}
+                        onClick={onsignout}
+                    >
                         Sign Out
                     </button>
                 </div>
@@ -197,7 +244,7 @@ export default function OwnerPage({ onsignout }) {
                         </div>
                     )}
 
-                    {/* FR3: DASHBOARD DISPLAYING INVENTORY STATISTICS USING CHARTS */}
+                    {/* Charts Tab */}
                     {tab === 'analytics' && (
                         <div className="analytics-section">
                             <div className="ophead">
@@ -350,7 +397,7 @@ export default function OwnerPage({ onsignout }) {
                     {/* Timber Stock Tab */}
                     {tab === 'inventory' && <InventoryTable timber={timber} />}
 
-                    {/* FR7: THE SYSTEM SHALL ALLOW THE OWNER TO ADD AND DELETE ACCOUNTS */}
+                    {/* Users Management Tab */}
                     {tab === 'users' && (
                         <div className="users-management-section">
                             <div className="ophead">
@@ -363,64 +410,125 @@ export default function OwnerPage({ onsignout }) {
                                     background: '#ffffff',
                                     border: '1px solid #e2e8f0',
                                     borderRadius: '8px',
-                                    padding: '20px',
+                                    padding: '24px',
                                     marginBottom: '30px',
-                                    boxShadow: '0 2px 4px rgba(0,0,0,0.04)',
+                                    boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
                                 }}
                             >
-                                <h3 style={{ margin: '0 0 15px 0', color: '#1e293b' }}>Add Manager or Worker Account</h3>
+                                <h3 style={{ margin: '0 0 20px 0', color: '#1e293b', fontSize: '18px', fontWeight: '700' }}>
+                                    Add Manager or Worker Account
+                                </h3>
                                 <form
                                     onSubmit={handleAddUser}
+                                    autoComplete="off"
                                     style={{
                                         display: 'grid',
-                                        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                                        gap: '12px',
-                                        alignItems: 'end',
+                                        gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+                                        columnGap: '20px',
+                                        rowGap: '22px',
+                                        alignItems: 'start',
                                     }}
                                 >
                                     <div>
-                                        <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '4px' }}>
+                                        <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', height: '18px', lineHeight: '18px', marginBottom: '8px', color: '#334155' }}>
                                             Role
                                         </label>
                                         <select
                                             value={uRole}
                                             onChange={(e) => setURole(e.target.value)}
-                                            style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #cbd5e1' }}
+                                            style={{
+                                                width: '100%',
+                                                height: '42px',
+                                                padding: '0 12px',
+                                                borderRadius: '6px',
+                                                border: '1px solid #cbd5e1',
+                                                fontSize: '14px',
+                                                boxSizing: 'border-box',
+                                                backgroundColor: '#fff',
+                                                color: '#1e293b',
+                                                outline: 'none',
+                                            }}
                                         >
                                             <option value="manager">Warehouse Manager</option>
                                             <option value="worker">Mill Worker</option>
                                         </select>
                                     </div>
                                     <div>
-                                        <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '4px' }}>
+                                        <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', height: '18px', lineHeight: '18px', marginBottom: '8px', color: '#334155' }}>
                                             Full Name
                                         </label>
                                         <input
                                             type="text"
                                             placeholder="e.g. Ramesh K"
                                             value={uName}
-                                            onChange={(e) => setUName(e.target.value)}
+                                            onChange={(e) => setUName(e.target.value.replace(/[^a-zA-Z\s\-\.']/g, ''))}
                                             required
-                                            style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #cbd5e1' }}
+                                            autoComplete="off"
+                                            style={{
+                                                width: '100%',
+                                                height: '42px',
+                                                padding: '0 12px',
+                                                borderRadius: '6px',
+                                                border: '1px solid #cbd5e1',
+                                                fontSize: '14px',
+                                                boxSizing: 'border-box',
+                                                color: '#1e293b',
+                                                outline: 'none',
+                                            }}
                                         />
                                     </div>
-                                    {uRole === 'manager' && (
+                                    {uRole === 'manager' ? (
                                         <div>
-                                            <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '4px' }}>
+                                            <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', height: '18px', lineHeight: '18px', marginBottom: '8px', color: '#334155' }}>
                                                 Belonging Warehouse
                                             </label>
                                             <input
                                                 type="text"
                                                 placeholder="e.g. Warehouse A, Central Yard"
                                                 value={uWarehouse}
-                                                onChange={(e) => setUWarehouse(e.target.value)}
+                                                onChange={(e) => setUWarehouse(e.target.value.replace(/[^a-zA-Z\s\-\.]/g, ''))}
                                                 required
-                                                style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #cbd5e1' }}
+                                                autoComplete="off"
+                                                style={{
+                                                    width: '100%',
+                                                    height: '42px',
+                                                    padding: '0 12px',
+                                                    borderRadius: '6px',
+                                                    border: '1px solid #cbd5e1',
+                                                    fontSize: '14px',
+                                                    boxSizing: 'border-box',
+                                                    color: '#1e293b',
+                                                    outline: 'none',
+                                                }}
+                                            />
+                                        </div>
+                                    ) : (
+                                        <div>
+                                            <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', height: '18px', lineHeight: '18px', marginBottom: '8px', color: '#334155' }}>
+                                                Phone Number
+                                            </label>
+                                            <input
+                                                type="tel"
+                                                placeholder="+91 9876543210"
+                                                value={uPhone}
+                                                onChange={(e) => setUPhone(e.target.value)}
+                                                autoComplete="off"
+                                                style={{
+                                                    width: '100%',
+                                                    height: '42px',
+                                                    padding: '0 12px',
+                                                    borderRadius: '6px',
+                                                    border: '1px solid #cbd5e1',
+                                                    fontSize: '14px',
+                                                    boxSizing: 'border-box',
+                                                    color: '#1e293b',
+                                                    outline: 'none',
+                                                }}
                                             />
                                         </div>
                                     )}
                                     <div>
-                                        <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '4px' }}>
+                                        <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', height: '18px', lineHeight: '18px', marginBottom: '8px', color: '#334155' }}>
                                             Email Address
                                         </label>
                                         <input
@@ -429,36 +537,96 @@ export default function OwnerPage({ onsignout }) {
                                             value={uEmail}
                                             onChange={(e) => setUEmail(e.target.value)}
                                             required
-                                            style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #cbd5e1' }}
+                                            autoComplete="off"
+                                            style={{
+                                                width: '100%',
+                                                height: '42px',
+                                                padding: '0 12px',
+                                                borderRadius: '6px',
+                                                border: '1px solid #cbd5e1',
+                                                fontSize: '14px',
+                                                boxSizing: 'border-box',
+                                                color: '#1e293b',
+                                                outline: 'none',
+                                            }}
                                         />
                                     </div>
-                                    <div>
-                                        <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '4px' }}>
-                                            Phone Number
-                                        </label>
-                                        <input
-                                            type="tel"
-                                            placeholder="+91 9876543210"
-                                            value={uPhone}
-                                            onChange={(e) => setUPhone(e.target.value)}
-                                            style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #cbd5e1' }}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '4px' }}>
-                                            Password (min 6 chars)
+                                    {uRole === 'manager' && (
+                                        <div>
+                                            <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', height: '18px', lineHeight: '18px', marginBottom: '8px', color: '#334155' }}>
+                                                Phone Number
+                                            </label>
+                                            <input
+                                                type="tel"
+                                                placeholder="+91 9876543210"
+                                                value={uPhone}
+                                                onChange={(e) => setUPhone(e.target.value)}
+                                                autoComplete="off"
+                                                style={{
+                                                    width: '100%',
+                                                    height: '42px',
+                                                    padding: '0 12px',
+                                                    borderRadius: '6px',
+                                                    border: '1px solid #cbd5e1',
+                                                    fontSize: '14px',
+                                                    boxSizing: 'border-box',
+                                                    color: '#1e293b',
+                                                    outline: 'none',
+                                                }}
+                                            />
+                                        </div>
+                                    )}
+                                    <div style={{ gridColumn: uRole === 'worker' ? 'span 2' : 'span 1' }}>
+                                        <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', height: '18px', lineHeight: '18px', marginBottom: '8px', color: '#334155' }}>
+                                            Password
                                         </label>
                                         <input
                                             type="password"
-                                            placeholder="Password"
+                                            placeholder="Min. 6 characters"
                                             value={uPassword}
                                             onChange={(e) => setUPassword(e.target.value)}
                                             required
-                                            style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #cbd5e1' }}
+                                            autoComplete="new-password"
+                                            style={{
+                                                width: '100%',
+                                                height: '42px',
+                                                padding: '0 12px',
+                                                borderRadius: '6px',
+                                                border: '1px solid #cbd5e1',
+                                                fontSize: '14px',
+                                                boxSizing: 'border-box',
+                                                color: '#1e293b',
+                                                outline: 'none',
+                                            }}
                                         />
                                     </div>
-                                    <div>
-                                        <button className="rpbtn" type="submit" style={{ width: '100%', padding: '9px 16px' }}>
+                                    <div
+                                        style={{
+                                            gridColumn: '1 / -1',
+                                            display: 'flex',
+                                            justifyContent: 'flex-end',
+                                            alignItems: 'center',
+                                            paddingTop: '20px',
+                                            marginTop: '6px',
+                                            borderTop: '1px solid #f1f5f9',
+                                        }}
+                                    >
+                                        <button
+                                            className="rpbtn"
+                                            type="submit"
+                                            style={{
+                                                height: '42px',
+                                                padding: '0 32px',
+                                                backgroundColor: '#8a1f1f',
+                                                color: '#ffffff',
+                                                fontWeight: '600',
+                                                fontSize: '14px',
+                                                borderRadius: '6px',
+                                                border: 'none',
+                                                cursor: 'pointer',
+                                                boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                                            }}
+                                        >
                                             Create Account
                                         </button>
                                     </div>
@@ -490,9 +658,9 @@ export default function OwnerPage({ onsignout }) {
                                                 </td>
                                             </tr>
                                         )}
-                                        {managers.map((m) => (
+                                        {managers.map((m, index) => (
                                             <tr key={m.id}>
-                                                <td>{m.id}</td>
+                                                <td>{index + 1}</td>
                                                 <td>
                                                     <strong>{m.name}</strong>
                                                 </td>
@@ -543,9 +711,9 @@ export default function OwnerPage({ onsignout }) {
                                                 </td>
                                             </tr>
                                         )}
-                                        {workers.map((w) => (
+                                        {workers.map((w, index) => (
                                             <tr key={w.id}>
-                                                <td>{w.id}</td>
+                                                <td>{index + 1}</td>
                                                 <td>
                                                     <strong>{w.name}</strong>
                                                 </td>

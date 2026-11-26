@@ -4,8 +4,30 @@ import InventoryTable from './InventoryTable';
 
 const rupees = (n) => '₹' + Number(n || 0).toLocaleString('en-IN');
 
+const formatDim = (s) => {
+    if (!s) return '';
+    const str = String(s).trim();
+    if (/\s*ft$/i.test(str)) return str;
+    return `${str} ft`;
+};
+
+const consolidateStockByType = (items = []) => {
+    const map = new Map();
+    for (const item of items) {
+        const rawType = String(item.type || item.type_name || 'Timber').trim();
+        const normalizedType = rawType.charAt(0).toUpperCase() + rawType.slice(1);
+        const existing = map.get(normalizedType) || { type: normalizedType, qty: 0, value: 0 };
+        const q = Number(item.qty ?? item.quantity ?? 0);
+        const v = item.value != null ? Number(item.value) : (q * Number(item.price || 0));
+        existing.qty += q;
+        existing.value += v;
+        map.set(normalizedType, existing);
+    }
+    return Array.from(map.values()).sort((a, b) => a.type.localeCompare(b.type));
+};
+
 export default function ManagerPage({ onsignout }) {
-    const [tab, setTab] = useState('inventory'); // 'inventory' | 'charts' (FR3) | 'requests' (FR2) | 'workers' (FR8) | 'wastage' (FR6) | 'txns' (FR5)
+    const [tab, setTab] = useState('inventory');
     const [timber, setTimber] = useState([]);
     const [requests, setRequests] = useState([]);
     const [workers, setWorkers] = useState([]);
@@ -16,7 +38,7 @@ export default function ManagerPage({ onsignout }) {
     const [msg, setMsg] = useState({ text: '', type: '' });
     const [loading, setLoading] = useState(false);
 
-    // FR8: Add Worker state
+    // Add Worker state
     const [wName, setWName] = useState('');
     const [wEmail, setWEmail] = useState('');
     const [wPhone, setWPhone] = useState('');
@@ -37,7 +59,7 @@ export default function ManagerPage({ onsignout }) {
             ]);
             if (Array.isArray(tData)) setTimber(tData);
             if (Array.isArray(rData)) setRequests(rData);
-            if (Array.isArray(uData)) setWorkers(uData.filter((u) => u.role === 'worker'));
+            if (Array.isArray(uData)) setWorkers(uData.filter((u) => u.role === 'worker').sort((a, b) => Number(a.id) - Number(b.id)));
             if (Array.isArray(txData)) setTxns(txData);
             if (Array.isArray(wData)) setWastageList(wData);
             if (Array.isArray(notifData)) setNotifications(notifData);
@@ -53,31 +75,45 @@ export default function ManagerPage({ onsignout }) {
         loadAll();
     }, []);
 
-    // FR2: Manager accepts a worker request (allocate or add)
+    // Manager accepts a worker request (allocate or add)
     const handleAccept = async (reqItem) => {
         setMsg({ text: '', type: '' });
         try {
             await api.acceptRequest(reqItem.id);
-            setMsg({ text: `Request #${reqItem.id} accepted successfully! Inventory updated.`, type: 'success' });
+            const itemDesc = reqItem.size
+                ? `${reqItem.type} (${formatDim(reqItem.size)})`
+                : (reqItem.type || 'timber');
+            const message = reqItem.kind === 'allocate'
+                ? `Allocated ${reqItem.qty} units of ${itemDesc} to ${reqItem.worker_name || 'worker'}.`
+                : `Added ${reqItem.qty} units of ${itemDesc} to inventory.`;
+            setMsg({ text: message, type: 'success' });
             loadAll();
         } catch (err) {
             setMsg({ text: err.message || 'Failed to accept request', type: 'error' });
         }
     };
 
-    // FR2: Manager rejects a request
-    const handleReject = async (reqId) => {
+    // Manager rejects a request
+    const handleReject = async (reqItemOrId) => {
         setMsg({ text: '', type: '' });
+        const isObj = reqItemOrId && typeof reqItemOrId === 'object';
+        const reqId = isObj ? reqItemOrId.id : reqItemOrId;
         try {
             await api.rejectRequest(reqId);
-            setMsg({ text: `Request #${reqId} rejected.`, type: 'success' });
+            const itemDesc = isObj && reqItemOrId.size
+                ? `${reqItemOrId.type} (${formatDim(reqItemOrId.size)})`
+                : (isObj && reqItemOrId.type ? reqItemOrId.type : 'timber');
+            const message = isObj
+                ? `Rejected request for ${reqItemOrId.qty} units of ${itemDesc}.`
+                : 'Request rejected.';
+            setMsg({ text: message, type: 'success' });
             loadAll();
         } catch (err) {
             setMsg({ text: err.message || 'Failed to reject request', type: 'error' });
         }
     };
 
-    // FR8: Manager adds a worker account
+    // Manager adds a worker account
     const handleAddWorker = async (e) => {
         e.preventDefault();
         setMsg({ text: '', type: '' });
@@ -88,8 +124,24 @@ export default function ManagerPage({ onsignout }) {
         if (!name || !email) {
             return setMsg({ text: 'Name and email are required', type: 'error' });
         }
+        if (/^\d+$/.test(name) || /^-?\d+$/.test(name) || /[0-9=<>_$%^&*()+!]/.test(name)) {
+            return setMsg({ text: 'Name cannot be numbers or symbols. It must be text only (e.g. Ramesh Kumar).', type: 'error' });
+        }
+        if (!/^[a-zA-Z][a-zA-Z\s\-\.']{1,99}$/.test(name)) {
+            return setMsg({ text: 'Name must start with a letter and contain text only (e.g. Ramesh Kumar).', type: 'error' });
+        }
         if (!password || password.length < 6) {
             return setMsg({ text: 'Password must be at least 6 characters long', type: 'error' });
+        }
+        if (wPhone && wPhone.trim()) {
+            const rawPhone = wPhone.trim();
+            if (/^-/.test(rawPhone) || (rawPhone.includes("-") && !/^\+?\d+[\-\s]?\d+$/.test(rawPhone))) {
+                return setMsg({ text: 'Phone number cannot be negative or contain invalid characters', type: 'error' });
+            }
+            const cleanedPhone = rawPhone.replace(/[\s\-\(\)]/g, "");
+            if (!/^\+?[1-9]\d{9,14}$/.test(cleanedPhone)) {
+                return setMsg({ text: 'Invalid phone number. Must be a valid 10 to 15 digit number (e.g. +91 9876543210)', type: 'error' });
+            }
         }
 
         try {
@@ -106,17 +158,17 @@ export default function ManagerPage({ onsignout }) {
             setWPhone('');
             setWPassword('');
             const uData = await api.getUsers();
-            setWorkers(uData.filter((u) => u.role === 'worker'));
+            setWorkers(uData.filter((u) => u.role === 'worker').sort((a, b) => Number(a.id) - Number(b.id)));
         } catch (err) {
             setMsg({ text: err.message || 'Failed to create worker', type: 'error' });
         }
     };
 
-    // FR8: Manager removes a worker account
+    // Manager removes a worker account
     const handleRemoveWorker = async (workerId, workerName) => {
         if (!window.confirm(`Are you sure you want to remove worker '${workerName}'?`)) return;
         try {
-            await api.deleteUser(workerId);
+            await api.deleteUser(workerId, 'worker');
             setMsg({ text: `Worker '${workerName}' removed.`, type: 'success' });
             setWorkers((prev) => prev.filter((w) => w.id !== workerId));
         } catch (err) {
@@ -124,22 +176,24 @@ export default function ManagerPage({ onsignout }) {
         }
     };
 
-    // Low stock items (FR9)
+    // Low stock items
     const low = timber.filter((t) => Number(t.qty ?? t.quantity ?? 0) <= Number(t.min ?? t.min_stock_level ?? 10));
     const pending = requests.filter((r) => String(r.status).toUpperCase() === 'PENDING');
 
-    // Chart calculations for FR3
-    const stockItems = stats?.stockByType || [];
+    // Chart calculations
+    const rawStockSource = (stats?.stockByType && stats.stockByType.length > 0) ? stats.stockByType : timber;
+    const stockItems = consolidateStockByType(rawStockSource);
     const totalQty = stockItems.reduce((acc, s) => acc + Number(s.qty || 0), 0);
     const totalValue = stockItems.reduce((acc, s) => acc + Number(s.value || 0), 0);
+    const sortedWorkers = [...workers].sort((a, b) => Number(a.id) - Number(b.id));
 
     const tabs = [
         ['inventory', 'Timber Stock'],
-        ['charts', 'Charts & Analytics (FR3)'],
+        ['charts', 'Charts & Analytics'],
         ['requests', `Requests (${pending.length})`],
-        ['workers', `Workers (${workers.length}) (FR8)`],
-        ['wastage', `Wastage Log (${wastageList.length}) (FR6)`],
-        ['txns', 'Transactions (FR5)'],
+        ['workers', `Workers (${workers.length})`],
+        ['wastage', `Wastage Log (${wastageList.length}) `],
+        ['txns', 'Transactions'],
     ];
 
     return (
@@ -156,7 +210,11 @@ export default function ManagerPage({ onsignout }) {
                     <span className="opwho" style={{ marginRight: '15px' }}>
                         Logged in as: <strong>Warehouse Manager</strong>
                     </span>
-                    <button className="op-btn" onClick={onsignout}>
+                    <button
+                        className="opbtn"
+                        style={{ color: 'white', backgroundColor: '#8a1f1f', cursor: 'pointer', fontWeight: 'bold' }}
+                        onClick={onsignout}
+                    >
                         Sign Out
                     </button>
                 </div>
@@ -194,7 +252,7 @@ export default function ManagerPage({ onsignout }) {
                 </aside>
 
                 <div className="opcontent">
-                    {/* FR9 Low Stock Notification Banner */}
+                    {/* Low Stock Notification Banner */}
                     {low.length > 0 && (
                         <div className="rpalert" style={{ marginBottom: '15px' }}>
                             <strong>Low Stock Warning:</strong>{' '}
@@ -239,13 +297,11 @@ export default function ManagerPage({ onsignout }) {
                     {/* Timber Inventory Tab */}
                     {tab === 'inventory' && <InventoryTable timber={timber} />}
 
-                    {/* ========================================================================= */}
-                    {/* FR3: DASHBOARD DISPLAYING INVENTORY STATISTICS USING CHARTS              */}
-                    {/* ========================================================================= */}
+                    {/* Charts Tab */}
                     {tab === 'charts' && (
                         <div className="charts-section">
                             <div className="ophead">
-                                <h2>Manager Graphical Analytics & Charts (FR3)</h2>
+                                <h2>Manager Graphical Analytics & Charts </h2>
                                 <button className="rpbtn grey" onClick={loadAll} disabled={loading}>
                                     {loading ? 'Refreshing...' : 'Refresh Charts'}
                                 </button>
@@ -263,7 +319,7 @@ export default function ManagerPage({ onsignout }) {
                                 }}
                             >
                                 <h3 style={{ margin: '0 0 15px 0', color: '#1e293b' }}>
-                                    Available Stock Quantity by Timber Species (CFT)
+                                    Available Stock Quantity by Timber Species
                                 </h3>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                                     {stockItems.length === 0 && <p className="opempty">No stock records found.</p>}
@@ -391,11 +447,11 @@ export default function ManagerPage({ onsignout }) {
                         </div>
                     )}
 
-                    {/* Requests Tab (FR2) */}
+                    {/* Requests Tab */}
                     {tab === 'requests' && (
                         <>
                             <div className="ophead">
-                                <h2>Worker Requests (FR2)</h2>
+                                <h2>Worker Requests</h2>
                             </div>
                             <div className="opscroll">
                                 <table>
@@ -426,7 +482,7 @@ export default function ManagerPage({ onsignout }) {
                                                     </td>
                                                     <td>{r.kind === 'allocate' ? 'Allocation' : 'Add Timber'}</td>
                                                     <td>
-                                                        {r.type} {r.size}
+                                                        {r.type} {formatDim(r.size)}
                                                     </td>
                                                     <td className="r">{r.qty}</td>
                                                     <td>
@@ -444,7 +500,7 @@ export default function ManagerPage({ onsignout }) {
                                                                 </button>
                                                                 <button
                                                                     className="rpbtn grey"
-                                                                    onClick={() => handleReject(r.id)}
+                                                                    onClick={() => handleReject(r)}
                                                                 >
                                                                     Reject
                                                                 </button>
@@ -460,19 +516,20 @@ export default function ManagerPage({ onsignout }) {
                         </>
                     )}
 
-                    {/* Workers Management Tab (FR8) */}
+                    {/* Workers Management Tab */}
                     {tab === 'workers' && (
                         <>
                             <div className="ophead">
-                                <h2>Worker Account Management (FR8)</h2>
+                                <h2>Worker Account Management</h2>
                             </div>
-                            <form className="rpform" onSubmit={handleAddWorker}>
+                            <form className="rpform" onSubmit={handleAddWorker} autoComplete="off">
                                 <input
                                     type="text"
                                     placeholder="Worker Name"
                                     value={wName}
-                                    onChange={(e) => setWName(e.target.value)}
+                                    onChange={(e) => setWName(e.target.value.replace(/[^a-zA-Z\s\-\.']/g, ''))}
                                     required
+                                    autoComplete="off"
                                 />
                                 <input
                                     type="email"
@@ -480,12 +537,14 @@ export default function ManagerPage({ onsignout }) {
                                     value={wEmail}
                                     onChange={(e) => setWEmail(e.target.value)}
                                     required
+                                    autoComplete="off"
                                 />
                                 <input
                                     type="tel"
-                                    placeholder="Phone (optional)"
+                                    placeholder="Phone Number"
                                     value={wPhone}
                                     onChange={(e) => setWPhone(e.target.value)}
+                                    autoComplete="off"
                                 />
                                 <input
                                     type="password"
@@ -494,6 +553,7 @@ export default function ManagerPage({ onsignout }) {
                                     onChange={(e) => setWPassword(e.target.value)}
                                     required
                                     minLength={6}
+                                    autoComplete="new-password"
                                 />
                                 <button className="rpbtn" type="submit">
                                     Add Worker
@@ -518,9 +578,9 @@ export default function ManagerPage({ onsignout }) {
                                                 </td>
                                             </tr>
                                         )}
-                                        {workers.map((w) => (
+                                        {sortedWorkers.map((w, index) => (
                                             <tr key={w.id}>
-                                                <td>{w.id}</td>
+                                                <td>{index + 1}</td>
                                                 <td>
                                                     <strong>{w.name}</strong>
                                                 </td>
@@ -543,13 +603,11 @@ export default function ManagerPage({ onsignout }) {
                         </>
                     )}
 
-                    {/* ========================================================================= */}
-                    {/* FR6: TIMBER WASTAGE LOG (MANAGER VIEW)                                    */}
-                    {/* ========================================================================= */}
+                    {/* Wastage Log Tab */}
                     {tab === 'wastage' && (
                         <>
                             <div className="ophead">
-                                <h2>Recorded Timber Wastage & Scrap Logs (FR6)</h2>
+                                <h2>Recorded Timber Wastage & Scrap Logs</h2>
                             </div>
                             <div className="opscroll">
                                 <table>
@@ -577,7 +635,7 @@ export default function ManagerPage({ onsignout }) {
                                                 <td>
                                                     <strong>{w.type || w.type_name}</strong>
                                                 </td>
-                                                <td>{w.size || 'Standard'}</td>
+                                                <td>{formatDim(w.size) || 'Standard'}</td>
                                                 <td className="r" style={{ color: '#dc2626', fontWeight: 'bold' }}>
                                                     -{w.qty ?? w.quantity} ft
                                                 </td>
@@ -591,11 +649,11 @@ export default function ManagerPage({ onsignout }) {
                         </>
                     )}
 
-                    {/* Transaction History Tab (FR5) */}
+                    {/* Transaction History Tab */}
                     {tab === 'txns' && (
                         <>
                             <div className="ophead">
-                                <h2>Transaction History (FR5)</h2>
+                                <h2>Transaction History</h2>
                             </div>
                             <div className="opscroll">
                                 <table>

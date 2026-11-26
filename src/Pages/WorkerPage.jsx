@@ -2,8 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../api';
 import InventoryTable from './InventoryTable';
 
+const formatDim = (s) => {
+    if (!s) return '';
+    const str = String(s).trim();
+    if (/\s*ft$/i.test(str)) return str;
+    return `${str} ft`;
+};
+
 export default function WorkerPage({ onsignout, name = 'Worker' }) {
-    const [tab, setTab] = useState('inventory'); // 'inventory' | 'requests' | 'wastage' (FR6)
+    const [tab, setTab] = useState('inventory');
     const [timber, setTimber] = useState([]);
     const [requests, setRequests] = useState([]);
     const [myAllocations, setMyAllocations] = useState([]);
@@ -19,11 +26,12 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
     const [nQty, setNQty] = useState('');
     const [nPrice, setNPrice] = useState('');
 
-    // FR6: Wastage form state (based on what the worker was allocated)
+    // Wastage form state
     const [selectedAllocId, setSelectedAllocId] = useState('');
     const [wQty, setWQty] = useState('');
     const [wWhy, setWWhy] = useState('');
     const [submittingWastage, setSubmittingWastage] = useState(false);
+    const [submittingReq, setSubmittingReq] = useState(false);
 
     // Load data from live backend
     const loadData = async () => {
@@ -50,9 +58,10 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
         loadData();
     }, []);
 
-    // FR2: Worker sends allocation request
+    // Worker sends allocation request
     const sendAllocation = async (e) => {
         e.preventDefault();
+        if (submittingReq) return;
         setMsg({ text: '', type: '' });
         const t = timber.find((x) => String(x.id || x.timber_id) === String(aId));
         const qty = Number(aQty);
@@ -65,32 +74,65 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
             return setMsg({ text: `Requested quantity (${qty}) exceeds available stock (${availableQty})`, type: 'error' });
         }
 
+        setSubmittingReq(true);
         try {
             await api.requestAllocation(t.id || t.timber_id, qty);
-            setMsg({ text: `Allocation request for ${qty} units of ${t.type || t.type_name} submitted successfully!`, type: 'success' });
+            setMsg({
+                text: `Allocation request for ${qty} units of ${t.type || t.type_name} submitted successfully!`,
+                type: 'success',
+            });
             setAId('');
             setAQty('');
             const rData = await api.getRequests();
             setRequests(rData);
         } catch (err) {
             setMsg({ text: err.message || 'Failed to submit allocation request', type: 'error' });
+        } finally {
+            setSubmittingReq(false);
         }
     };
 
-    // FR2: Worker sends add timber request
+    // Worker sends add timber request
     const sendAdd = async (e) => {
         e.preventDefault();
+        if (submittingReq) return;
         setMsg({ text: '', type: '' });
-        const qty = Number(nQty);
-        const price = Number(nPrice);
 
-        if (!nType.trim() || !nSize.trim() || qty <= 0 || price <= 0) {
-            return setMsg({ text: 'Fill all fields with valid positive values', type: 'error' });
+        const cleanType = nType.trim();
+        if (!cleanType) {
+            return setMsg({ text: 'Timber species name is required', type: 'error' });
+        }
+        if (/^\d+$/.test(cleanType)) {
+            return setMsg({ text: 'Timber species cannot be numeric. Enter a valid wood name (e.g. Teak, Rosewood, Pine, Oak, Cedar)', type: 'error' });
+        }
+        if (!/^[a-zA-Z][a-zA-Z0-9\s\-]{1,49}$/.test(cleanType)) {
+            return setMsg({ text: 'Timber species must start with a letter and be at least 2 characters (e.g. Teak, Rosewood)', type: 'error' });
         }
 
+        const sizeMatch = nSize.trim().match(/^(\d+(?:\.\d+)?)\s*[xX*]\s*(\d+(?:\.\d+)?)(?:\s*(?:ft|in|m)?)?$/);
+        if (!sizeMatch) {
+            return setMsg({ text: 'Dimensions must be formatted as positive Diameter x Length (e.g. 4x10 or 12x32)', type: 'error' });
+        }
+        const diam = parseFloat(sizeMatch[1]);
+        const len = parseFloat(sizeMatch[2]);
+        if (isNaN(diam) || isNaN(len) || diam <= 0 || len <= 0) {
+            return setMsg({ text: 'Dimensions must be positive numbers greater than 0', type: 'error' });
+        }
+
+        const qty = parseInt(nQty, 10);
+        const price = parseFloat(nPrice);
+        if (isNaN(qty) || qty <= 0) {
+            return setMsg({ text: 'Quantity must be a positive integer greater than 0', type: 'error' });
+        }
+        if (isNaN(price) || price <= 0) {
+            return setMsg({ text: 'Unit price must be greater than 0', type: 'error' });
+        }
+
+        setSubmittingReq(true);
         try {
-            await api.requestAddTimber({ type: nType.trim(), size: nSize.trim(), qty, price });
-            setMsg({ text: `Request to add ${qty} units of ${nType.trim()} submitted!`, type: 'success' });
+            const normalizedDim = `${diam}x${len} ft`;
+            await api.requestAddTimber({ type: cleanType, size: normalizedDim, qty, price });
+            setMsg({ text: `Request to add ${qty} units of ${cleanType} (${normalizedDim}) submitted!`, type: 'success' });
             setNType('');
             setNSize('');
             setNQty('');
@@ -99,12 +141,12 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
             setRequests(rData);
         } catch (err) {
             setMsg({ text: err.message || 'Failed to submit add request', type: 'error' });
+        } finally {
+            setSubmittingReq(false);
         }
     };
 
-    // =========================================================================
-    // FR6: WORKER RECORDS WASTAGE FOR TIMBER ALLOCATED TO THEM
-    // =========================================================================
+    // Worker records wastage for timber allocated to them
     const selectedAllocation = myAllocations.find(
         (a) => String(a.allocation_id || a.id) === String(selectedAllocId)
     );
@@ -120,9 +162,19 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
         const qty = parseFloat(wQty);
         const reason = wWhy.trim();
 
+        if (!reason) {
+            return setMsg({ text: 'Reason for scrap / wastage is required', type: 'error' });
+        }
+        if (/^\d+$/.test(reason)) {
+            return setMsg({ text: 'Reason must be text only. Numeric values are not allowed.', type: 'error' });
+        }
+        if (!/^[a-zA-Z][a-zA-Z0-9\s,.'\-\/]{1,199}$/.test(reason) || /^\d/.test(reason) || !/[a-zA-Z]{2,}/.test(reason)) {
+            return setMsg({ text: 'Reason must be descriptive text only (e.g. End grain split, deep rot, knots, saw blade defect)', type: 'error' });
+        }
+
         if (Number(selectedAllocation.wasted_qty || 0) > 0) {
             return setMsg({
-                text: `Wastage has already been recorded for this allocated wood (Allocation #${selectedAllocation.allocation_id || selectedAllocation.id}). A worker cannot allot wastage for a certain wood more than once.`,
+                text: `Wastage has already been recorded for this allocated ${selectedAllocation.type}. A worker cannot allot wastage for a wood item more than once.`,
                 type: 'error',
             });
         }
@@ -146,7 +198,7 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
                 reason: reason || 'Defects / Cutting Loss',
             });
             setMsg({
-                text: `Successfully accounted for ${qty} ft of wastage for Allocation #${selectedAllocation.allocation_id || selectedAllocation.id} (${selectedAllocation.type})!`,
+                text: `Recorded ${qty} ft wastage for ${selectedAllocation.type} (${formatDim(selectedAllocation.size)}).`,
                 type: 'success',
             });
             setSelectedAllocId('');
@@ -178,8 +230,8 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
 
     const tabs = [
         ['inventory', 'Timber Stock'],
-        ['requests', 'Submit Requests (FR2)'],
-        ['wastage', 'Record Wastage (FR6)'],
+        ['requests', 'Submit Requests '],
+        ['wastage', 'Record Wastage '],
     ];
 
     return (
@@ -196,7 +248,11 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
                     <span className="opwho" style={{ marginRight: '15px' }}>
                         Worker: <strong>{name}</strong>
                     </span>
-                    <button className="opbtn" onClick={onsignout}>
+                    <button
+                        className="opbtn"
+                        style={{ color: 'white', backgroundColor: '#8a1f1f', cursor: 'pointer', fontWeight: 'bold' }}
+                        onClick={onsignout}
+                    >
                         Sign Out
                     </button>
                 </div>
@@ -213,7 +269,7 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
                 </aside>
 
                 <div className="opcontent">
-                    {/* Navigation Tabs including FR6 Record Wastage */}
+                    {/* Navigation Tabs */}
                     <div className="rptabs" style={{ marginBottom: '20px' }}>
                         {tabs.map(([k, label]) => (
                             <button
@@ -248,7 +304,7 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
                     {/* Inventory Tab */}
                     {tab === 'inventory' && <InventoryTable timber={timber} />}
 
-                    {/* Requests Tab (FR2) */}
+                    {/* Requests Tab */}
                     {tab === 'requests' && (
                         <>
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px', marginBottom: '30px' }}>
@@ -259,49 +315,51 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
                                         Request timber pieces from storage for assigned mill tasks. Once approved by the manager, you can log wastage for it.
                                     </p>
                                     <select value={aId} onChange={(e) => setAId(e.target.value)} required>
-                                        <option value="">-- Select timber in stock --</option>
+                                        <option value="">Select timber in stock</option>
                                         {timber.map((t) => (
                                             <option key={t.id || t.timber_id} value={t.id || t.timber_id}>
-                                                {t.type || t.type_name} ({t.size}) — Available: {t.qty ?? t.quantity}
+                                                {t.type || t.type_name} ({formatDim(t.size)}) : Available: {t.qty ?? t.quantity}
                                             </option>
                                         ))}
                                     </select>
                                     <input
                                         type="number"
-                                        placeholder="Quantity needed (CFT)"
+                                        placeholder="Quantity needed "
                                         value={aQty}
                                         onChange={(e) => setAQty(e.target.value)}
                                         min="1"
                                         required
                                     />
-                                    <button className="rpbtn" type="submit">
-                                        Send Allocation Request
+                                    <button className="rpbtn" type="submit" disabled={submittingReq}>
+                                        {submittingReq ? 'Submitting...' : 'Send Allocation Request'}
                                     </button>
                                 </form>
 
                                 {/* Add Timber Request Form */}
-                                <form className="rpform" onSubmit={sendAdd} style={{ margin: 0 }}>
+                                <form className="rpform" onSubmit={sendAdd} style={{ margin: 0 }} autoComplete="off">
                                     <h3>Request Add New Timber Stock</h3>
                                     <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '12px' }}>
                                         Notify manager of newly arrived timber stock to be added to inventory.
                                     </p>
                                     <input
                                         type="text"
-                                        placeholder="Species / Type (e.g. Teak, Sal)"
+                                        placeholder="Species / Type "
                                         value={nType}
                                         onChange={(e) => setNType(e.target.value)}
                                         required
+                                        autoComplete="off"
                                     />
                                     <input
                                         type="text"
-                                        placeholder="Diameter x Length (e.g. 4x10 ft, 12x20 ft)"
+                                        placeholder="Diameter x Length (ft)"
                                         value={nSize}
                                         onChange={(e) => setNSize(e.target.value)}
                                         required
+                                        autoComplete="off"
                                     />
                                     <input
                                         type="number"
-                                        placeholder="Quantity (CFT)"
+                                        placeholder="Quantity"
                                         value={nQty}
                                         onChange={(e) => setNQty(e.target.value)}
                                         min="1"
@@ -315,8 +373,8 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
                                         min="1"
                                         required
                                     />
-                                    <button className="rpbtn" type="submit">
-                                        Send Add Request
+                                    <button className="rpbtn" type="submit" disabled={submittingReq}>
+                                        {submittingReq ? 'Submitting...' : 'Send Add Request'}
                                     </button>
                                 </form>
                             </div>
@@ -354,7 +412,7 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
                                                         </span>
                                                     </td>
                                                     <td>
-                                                        {r.type} {r.size}
+                                                        {r.type} {formatDim(r.size)}
                                                     </td>
                                                     <td className="r">{r.qty}</td>
                                                     <td>
@@ -371,13 +429,11 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
                         </>
                     )}
 
-                    {/* ========================================================================= */}
-                    {/* FR6: WORKERS RECORD AND ACCOUNT FOR WASTAGE FOR TIMBER ALLOCATED TO THEM */}
-                    {/* ========================================================================= */}
+                    {/* Wastage Tab */}
                     {tab === 'wastage' && (
                         <div className="wastage-management-section">
                             <div className="ophead">
-                                <h2>Timber Wastage Management (FR6)</h2>
+                                <h2>Timber Wastage Management</h2>
                             </div>
 
                             {/* Section 1: Overview of What Was Allocated to this Worker */}
@@ -442,7 +498,7 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
                                                             <strong>#{a.allocation_id || a.id}</strong>
                                                         </td>
                                                         <td>{a.type}</td>
-                                                        <td>{a.size}</td>
+                                                        <td>{formatDim(a.size)}</td>
                                                         <td className="r">{a.allocated_qty} units</td>
                                                         <td className="r" style={{ color: '#dc2626' }}>
                                                             {a.wasted_qty} ft
@@ -482,7 +538,7 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
                                         Log Wastage for Your Allocated Timber
                                     </h3>
                                     <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '20px' }}>
-                                        Specify the quantity lost from your allocated batch and state the cause of loss (e.g. knots, rot, splitting, miscut).
+                                        Specify the quantity lost from your allocated batch and state the cause of loss .
                                     </p>
                                     <form onSubmit={handleRecordWastage} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                                         <div>
@@ -502,7 +558,7 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
                                                         value={a.allocation_id || a.id}
                                                         disabled={Number(a.wasted_qty || 0) > 0 || a.remaining_qty <= 0}
                                                     >
-                                                        Allocation #{a.allocation_id || a.id}: {a.type} ({a.size}) — {Number(a.wasted_qty || 0) > 0 ? 'Wastage Already Allotted' : `${a.remaining_qty} ft available`}
+                                                        {a.type} ({formatDim(a.size)}) — {Number(a.wasted_qty || 0) > 0 ? 'Wastage Already Logged' : `${a.remaining_qty} ft available`}
                                                     </option>
                                                 ))}
                                             </select>
@@ -522,7 +578,7 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
                                                 }}
                                             >
                                                 <span>
-                                                    Selected: <strong>{selectedAllocation.type} ({selectedAllocation.size})</strong>
+                                                    Selected: <strong>{selectedAllocation.type} ({formatDim(selectedAllocation.size)})</strong>
                                                     {Number(selectedAllocation.wasted_qty || 0) > 0 && ' — Wastage already allotted'}
                                                 </span>
                                                 <span style={{ color: Number(selectedAllocation.wasted_qty || 0) > 0 ? '#991b1b' : '#047857', fontWeight: 'bold' }}>
@@ -538,7 +594,7 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
                                             <input
                                                 type="number"
                                                 step="any"
-                                                placeholder="Enter wastage length in ft (e.g. 0.5, 1.25)"
+                                                placeholder="Enter wastage length in ft "
                                                 value={wQty}
                                                 onChange={(e) => setWQty(e.target.value)}
                                                 min="0.01"
@@ -619,7 +675,7 @@ export default function WorkerPage({ onsignout, name = 'Worker' }) {
                                                 <td>
                                                     <strong>{w.type || w.type_name}</strong>
                                                 </td>
-                                                <td>{w.size || 'Standard'}</td>
+                                                <td>{formatDim(w.size) || 'Standard'}</td>
                                                 <td className="r" style={{ color: '#dc2626', fontWeight: 'bold' }}>
                                                     -{w.qty ?? w.quantity} ft
                                                 </td>

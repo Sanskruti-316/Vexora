@@ -26,6 +26,8 @@ import {
   searchAddress,
   searchTimberName,
   searchSize,
+  stockMutex,
+  StockMutexLock,
 } from "./algorithms.js";
 
 const app = express();
@@ -64,6 +66,30 @@ const posFloat = (v, msg = "Invalid quantity") => {
   return n;
 };
 
+// Helper to validate phone number and reject negative or malformed inputs
+const validatePhone = (v, defaultPhone = "+91 9999900000") => {
+  if (!v) return defaultPhone;
+  const raw = String(v).trim();
+  if (!raw) return defaultPhone;
+
+  // Disallow negative numbers or minus sign (e.g. "-1")
+  if (/^-/.test(raw) || (raw.includes("-") && !/^\+?\d+[\-\s]?\d+$/.test(raw))) {
+    const err = new Error("Phone number cannot be negative or contain invalid characters");
+    err.status = 400;
+    throw err;
+  }
+
+  // Strip spaces, hyphens, and parentheses
+  const cleaned = raw.replace(/[\s\-\(\)]/g, "");
+  // Must be valid phone number with 10 to 15 digits (optionally prefixed by +)
+  if (!/^\+?[1-9]\d{9,14}$/.test(cleaned)) {
+    const err = new Error("Invalid phone number. Must be a valid positive 10 to 15 digit number (e.g. +91 9876543210 or 9876543210)");
+    err.status = 400;
+    throw err;
+  }
+  return raw;
+};
+
 // Database transaction helper
 async function tx(fn) {
   const client = await pool.connect();
@@ -75,17 +101,16 @@ async function tx(fn) {
   } catch (err) {
     try {
       await client.query("ROLLBACK");
-    } catch {}
+    } catch { }
     throw err;
   } finally {
     if (client.release) client.release();
   }
 }
 
-/**
- * FR9: Automated Low-Stock Alert System
- * Detects any timber where qty < min and creates/updates notifications.
- */
+// ==========================================
+// FR9: AUTOMATED LOW-STOCK MONITORING (Background Daemon)
+// ==========================================
 export async function checkLow(db = pool) {
   try {
     if (pool.hasEnterpriseSchema) {
@@ -108,7 +133,7 @@ export async function checkLow(db = pool) {
         if (existing.rows.length === 0) {
           await db.query(
             "INSERT INTO low_stock_alert (current_quantity, min_level, alert_time, is_read, type_id, manager_id) VALUES ($1, $2, NOW(), false, $3, $4)",
-            [item.quantity, item.min_stock_level, item.type_id, targetManagerId]
+            [Math.round(Number(item.quantity || 0)), Math.round(Number(item.min_stock_level || 0)), item.type_id, targetManagerId]
           );
         }
       }
@@ -149,7 +174,7 @@ export async function checkLow(db = pool) {
   }
 }
 
-// Background cron interval to monitor stock levels every 60 seconds (FR9)
+// Monitor stock levels periodically
 setInterval(() => checkLow().catch(console.error), 60000);
 
 // ==========================================
@@ -161,8 +186,6 @@ app.get("/api/health", (req, res) => {
 
 // ==========================================
 // FR1: AUTHENTICATION & LOGIN
-// The system shall allow users to log in using their registered
-// credentials through a web interface and provide a role-specific dashboard.
 // ==========================================
 const handleLogin = async (req, res) => {
   const email = String(req.body.email || "").toLowerCase().trim();
@@ -205,6 +228,10 @@ const handleRegisterOwner = async (req, res) => {
   if (!name || !email || !password) {
     return res.status(400).json({ error: "Name, email, and password are required" });
   }
+  const cleanName = String(name || "").trim();
+  if (/^\d+$/.test(cleanName) || /^-?\d+$/.test(cleanName) || /[0-9=<>_$%^&*()+!]/.test(cleanName) || !/^[a-zA-Z][a-zA-Z\s\-\.']{1,99}$/.test(cleanName)) {
+    return res.status(400).json({ error: "Name cannot be numbers or symbols. It must be text only (e.g. Ramesh Kumar)." });
+  }
   if (String(password).length < 6) {
     return res.status(400).json({ error: "Password must be at least 6 characters long" });
   }
@@ -222,7 +249,7 @@ const handleRegisterOwner = async (req, res) => {
   if (pool.hasEnterpriseSchema) {
     const ins = await pool.query(
       "INSERT INTO owner (name, email, phone, address, password_hash, is_active) VALUES ($1, $2, $3, $4, $5, true) RETURNING owner_id as id, name, email",
-      [name.trim(), cleanedEmail, phone ? phone.trim() : "+91 9999999999", address ? address.trim() : "Headquarters", hash]
+      [name.trim(), cleanedEmail, validatePhone(phone, "+91 9999999999"), address ? address.trim() : "Headquarters", hash]
     );
     newOwner = ins.rows[0];
   } else {
@@ -260,9 +287,7 @@ app.get("/api/auth/me", auth(), (req, res) => {
 });
 
 // ==========================================
-// FR3: INVENTORY STATISTICS & DASHBOARD
-// The system shall provide a dashboard displaying inventory statistics
-// using charts and graphical representations.
+// FR3: INVENTORY STATISTICS & DASHBOARD (Charts & Analytics)
 // ==========================================
 app.get(
   "/api/dashboard",
@@ -286,10 +311,10 @@ app.get(
           ) as pending_reqs
         `),
         pool.query(`
-          SELECT tt.type_name as type, SUM(t.quantity)::int as qty, SUM(t.quantity * t.price)::float8 as value
+          SELECT INITCAP(TRIM(tt.type_name)) as type, SUM(t.quantity)::int as qty, SUM(t.quantity * t.price)::float8 as value
           FROM timber t
           JOIN timber_type tt ON tt.type_id = t.type_id
-          GROUP BY tt.type_name ORDER BY tt.type_name
+          GROUP BY INITCAP(TRIM(tt.type_name)) ORDER BY INITCAP(TRIM(tt.type_name))
         `),
         pool.query(`
           SELECT status, COUNT(*)::int as count FROM (
@@ -338,7 +363,7 @@ app.get(
 
     // 2. Stock distribution by timber type (for Bar/Pie Chart)
     const { rows: stockByType } = await pool.query(
-      "SELECT type, SUM(qty) as qty, SUM(qty * price) as value FROM timber GROUP BY type ORDER BY type"
+      "SELECT INITCAP(TRIM(type)) as type, SUM(qty) as qty, SUM(qty * price) as value FROM timber GROUP BY INITCAP(TRIM(type)) ORDER BY INITCAP(TRIM(type))"
     );
 
     // 3. Request count grouped by status (for Status Doughnut/Pie Chart)
@@ -370,12 +395,9 @@ app.get(
 );
 
 // ==========================================
-// FR4: TIMBER SEARCH, VIEW, SORT, AND FILTER
-// The system shall allow workers and managers to search, view, sort,
-// and filter timber stock based on attributes such as type, quantity,
-// price, availability, size, and date added.
+// FR4: TIMBER SEARCH, VIEW, SORT, AND FILTER (DSA Pipeline)
 // ==========================================
-// Helper to fetch all raw timber records from Supabase / Database
+// Timber query and search pipeline
 async function fetchAllTimberRecords() {
   if (pool.hasEnterpriseSchema) {
     const { rows } = await pool.query(`
@@ -392,16 +414,6 @@ async function fetchAllTimberRecords() {
   }
 }
 
-/**
- * FR4: Main Timber Query Pipeline
- * Executes the complete Main Algorithm:
- * 1. Retrieve timber records from Supabase.
- * 2. Check operation selected by user.
- * 3. Searching -> Binary Search algorithm (O(log n)).
- * 4. Filtering -> Linear Filtering algorithm (O(n)).
- * 5. Sorting -> Merge Sort algorithm (O(n log n)).
- * 6. Return results or "No Records Found".
- */
 app.get(
   "/api/timber",
   auth("worker", "manager", "owner"),
@@ -521,16 +533,23 @@ app.patch(
   auth("manager", "owner"),
   h(async (req, res) => {
     const newMin = posInt(req.body.min, "Minimum stock must be a positive integer");
-    await pool.query("UPDATE timber SET min = $1 WHERE id = $2", [newMin, req.params.id]);
+    if (pool.hasEnterpriseSchema) {
+      const t = await pool.query("SELECT type_id FROM timber WHERE timber_id = $1", [req.params.id]);
+      if (t.rows.length > 0) {
+        await pool.query("UPDATE timber_type SET min_stock_level = $1 WHERE type_id = $2", [newMin, t.rows[0].type_id]);
+      } else {
+        await pool.query("UPDATE timber_type SET min_stock_level = $1 WHERE type_id = $2", [newMin, req.params.id]);
+      }
+    } else {
+      await pool.query("UPDATE timber SET min = $1 WHERE id = $2", [newMin, req.params.id]);
+    }
     await checkLow();
     res.json({ message: "Minimum stock threshold updated successfully", min: newMin });
   })
 );
 
 // ==========================================
-// FR2: REQUESTS & ALLOCATIONS
-// The system shall allow the manager to accept the add timber req
-// and allocate stored timber to workers.
+// FR2: REQUESTS & ALLOCATIONS (Worker Requests & Manager Approvals)
 // ==========================================
 // 1. Submit request (Worker)
 app.post(
@@ -542,48 +561,103 @@ app.post(
 
     if (kind === "allocate") {
       // Worker requests allocation of existing stored timber
-      const { rows } = await pool.query(
-        pool.hasEnterpriseSchema
-          ? "SELECT t.*, tt.type_name as type, t.quantity as qty, (t.width::float || 'x' || t.length::float || ' ft') as size FROM timber t JOIN timber_type tt ON tt.type_id = t.type_id WHERE t.timber_id = $1"
-          : "SELECT * FROM timber WHERE id = $1",
-        [timber_id]
-      );
-      const item = rows[0];
-      if (!item) throw new Error("Timber item not found");
-      const currentQty = Number(item.qty ?? item.quantity ?? 0);
-      if (qty > currentQty) {
-        throw new Error(`Requested ${qty} exceeds available stock of ${currentQty} units`);
-      }
+      // Enforce Mutex Lock for this timber record to serialize allocation requests and prevent over-allocation race conditions
+      return await stockMutex.withLock(timber_id, async () => {
+        const { rows } = await pool.query(
+          pool.hasEnterpriseSchema
+            ? "SELECT t.*, tt.type_name as type, t.quantity as qty, (t.width::float || 'x' || t.length::float || ' ft') as size FROM timber t JOIN timber_type tt ON tt.type_id = t.type_id WHERE t.timber_id = $1"
+            : "SELECT * FROM timber WHERE id = $1",
+          [timber_id]
+        );
+        const item = rows[0];
+        if (!item) throw new Error("Timber item not found");
+        const physicalStock = Number(item.qty ?? item.quantity ?? 0);
 
-      if (pool.hasEnterpriseSchema) {
-        let workerMgrId = null;
-        const wRow = await pool.query("SELECT manager_id, owner_id FROM worker WHERE worker_id = $1", [req.user.id]);
-        if (wRow.rows.length > 0) {
-          if (wRow.rows[0].manager_id) {
-            const checkM = await pool.query("SELECT manager_id FROM manager WHERE manager_id = $1", [wRow.rows[0].manager_id]);
-            if (checkM.rows.length > 0) workerMgrId = checkM.rows[0].manager_id;
-          }
-          if (!workerMgrId && wRow.rows[0].owner_id) {
-            const sameOwnerM = await pool.query("SELECT manager_id FROM manager WHERE owner_id = $1 ORDER BY manager_id ASC LIMIT 1", [wRow.rows[0].owner_id]);
-            workerMgrId = sameOwnerM.rows[0]?.manager_id || null;
-          }
+        // Mutex Lock concurrency check: calculate currently pending unallocated requests for this timber
+        let pendingQty = 0;
+        if (pool.hasEnterpriseSchema) {
+          const pRes = await pool.query(
+            "SELECT COALESCE(SUM(quantity), 0) as total_pending FROM allocation_request WHERE timber_id = $1 AND status = 'Pending'",
+            [timber_id]
+          );
+          pendingQty = Number(pRes.rows[0]?.total_pending || 0);
+        } else {
+          const pRes = await pool.query(
+            "SELECT COALESCE(SUM(qty), 0) as total_pending FROM requests WHERE timber_id = $1 AND kind = 'allocate' AND status = 'Pending'",
+            [timber_id]
+          );
+          pendingQty = Number(pRes.rows[0]?.total_pending || 0);
         }
 
-        await pool.query(
-          "INSERT INTO allocation_request (quantity, status, request_time, worker_id, manager_id, timber_id) VALUES ($1, 'Pending', NOW(), $2, $3, $4)",
-          [qty, req.user.id, workerMgrId, timber_id]
-        );
-      } else {
-        await pool.query(
-          "INSERT INTO requests (kind, worker_id, timber_id, type, size, qty, status) VALUES ($1, $2, $3, $4, $5, $6, 'Pending')",
-          [kind, req.user.id, timber_id, item.type, item.size, qty]
-        );
-      }
+        const availableUnreserved = Math.max(0, physicalStock - pendingQty);
+        if (qty > availableUnreserved) {
+          throw new Error(
+            `Cannot allocate ${qty} units: Mutex Lock enforced. Only ${availableUnreserved} unreserved units available (${pendingQty} units already reserved out of ${physicalStock} in stock).`
+          );
+        }
+
+        if (pool.hasEnterpriseSchema) {
+          let workerMgrId = null;
+          const wRow = await pool.query("SELECT manager_id, owner_id FROM worker WHERE worker_id = $1", [req.user.id]);
+          if (wRow.rows.length > 0) {
+            if (wRow.rows[0].manager_id) {
+              const checkM = await pool.query("SELECT manager_id FROM manager WHERE manager_id = $1", [wRow.rows[0].manager_id]);
+              if (checkM.rows.length > 0) workerMgrId = checkM.rows[0].manager_id;
+            }
+            if (!workerMgrId && wRow.rows[0].owner_id) {
+              const sameOwnerM = await pool.query("SELECT manager_id FROM manager WHERE owner_id = $1 ORDER BY manager_id ASC LIMIT 1", [wRow.rows[0].owner_id]);
+              workerMgrId = sameOwnerM.rows[0]?.manager_id || null;
+            }
+          }
+
+          await pool.query(
+            "INSERT INTO allocation_request (quantity, status, request_time, worker_id, manager_id, timber_id) VALUES ($1, 'Pending', NOW(), $2, $3, $4)",
+            [qty, req.user.id, workerMgrId, timber_id]
+          );
+        } else {
+          await pool.query(
+            "INSERT INTO requests (kind, worker_id, timber_id, type, size, qty, status) VALUES ($1, $2, $3, $4, $5, $6, 'Pending')",
+            [kind, req.user.id, timber_id, item.type, item.size, qty]
+          );
+        }
+
+        return res.status(201).json({
+          message: "Request submitted successfully",
+          reservedQty: qty,
+          remainingUnreserved: availableUnreserved - qty,
+          mutexLocked: true,
+        });
+      });
     } else if (kind === "add") {
       // Worker requests adding new timber
-      if (!type || !size || !(Number(price) > 0)) {
-        throw new Error("Timber type, size, and positive price are required");
+      const cleanType = String(type || "").trim();
+      if (!cleanType) {
+        throw new Error("Timber species / type is required");
       }
+      if (/^\d+$/.test(cleanType)) {
+        throw new Error("Timber species name cannot be numeric. Please enter a valid wood name (e.g. Teak, Rosewood, Pine, Oak, Cedar)");
+      }
+      if (!/^[a-zA-Z][a-zA-Z0-9\s\-]{1,49}$/.test(cleanType)) {
+        throw new Error("Timber species name must start with a letter and contain valid characters (e.g. Teak, Rosewood)");
+      }
+
+      const cleanSize = String(size || "").trim();
+      const sizeMatch = cleanSize.match(/^(\d+(?:\.\d+)?)\s*[xX*]\s*(\d+(?:\.\d+)?)(?:\s*(?:ft|in|m)?)?$/);
+      if (!sizeMatch) {
+        throw new Error("Invalid timber dimensions. Format must be Diameter x Length with positive numbers (e.g. 4x10 or 12x32)");
+      }
+      const diam = parseFloat(sizeMatch[1]);
+      const len = parseFloat(sizeMatch[2]);
+      if (isNaN(diam) || isNaN(len) || diam <= 0 || len <= 0) {
+        throw new Error("Timber dimensions (diameter and length) must be positive numbers greater than zero");
+      }
+      const normalizedSize = `${diam}x${len} ft`;
+
+      const cleanPrice = parseFloat(price);
+      if (isNaN(cleanPrice) || cleanPrice <= 0) {
+        throw new Error("Price per unit must be greater than zero");
+      }
+
       if (pool.hasEnterpriseSchema) {
         let workerMgrId = null;
         const wRow = await pool.query("SELECT manager_id, owner_id FROM worker WHERE worker_id = $1", [req.user.id]);
@@ -598,20 +672,20 @@ app.post(
           }
         }
 
-        const typeRes = await pool.query("SELECT type_id FROM timber_type WHERE type_name ILIKE $1", [type.trim()]);
+        const typeRes = await pool.query("SELECT type_id FROM timber_type WHERE type_name ILIKE $1", [cleanType]);
         let typeId = typeRes.rows[0]?.type_id;
         if (!typeId) {
-          const insType = await pool.query("INSERT INTO timber_type (type_name, min_stock_level) VALUES ($1, 20) RETURNING type_id", [type.trim()]);
+          const insType = await pool.query("INSERT INTO timber_type (type_name, min_stock_level) VALUES ($1, 20) RETURNING type_id", [cleanType]);
           typeId = insType.rows[0].type_id;
         }
         await pool.query(
           "INSERT INTO add_timber_request (timber_code, quantity, price, status, request_time, worker_id, manager_id, type_id) VALUES ($1, $2, $3, 'Pending', NOW(), $4, $5, $6)",
-          [size.trim(), qty, Number(price), req.user.id, workerMgrId, typeId]
+          [normalizedSize, qty, cleanPrice, req.user.id, workerMgrId, typeId]
         );
       } else {
         await pool.query(
           "INSERT INTO requests (kind, worker_id, type, size, qty, price, status) VALUES ($1, $2, $3, $4, $5, $6, 'Pending')",
-          [kind, req.user.id, type.trim(), size.trim(), qty, Number(price)]
+          [kind, req.user.id, cleanType, normalizedSize, qty, cleanPrice]
         );
       }
     } else {
@@ -629,9 +703,13 @@ app.get(
   h(async (req, res) => {
     const isWorker = req.user.role === "worker";
     let sql = `
-      SELECT r.*, u.name as worker_name, u.email as worker_email, u.owner_id as worker_owner_id 
+      SELECT r.*, 
+             coalesce(u.name, w.name, 'Worker #' || r.worker_id) as worker_name, 
+             coalesce(u.email, w.email, '') as worker_email, 
+             coalesce(u.owner_id, w.owner_id) as worker_owner_id 
       FROM requests r 
-      JOIN users u ON u.id = r.worker_id
+      LEFT JOIN users u ON u.id = r.worker_id AND u.role = 'worker'
+      LEFT JOIN worker w ON w.worker_id = r.worker_id
     `;
     const params = [];
     const conditions = [];
@@ -682,7 +760,7 @@ app.post(
       const { rows } = await client.query(
         `SELECT r.*, u.name as worker_name, u.owner_id as worker_owner_id 
          FROM requests r 
-         JOIN users u ON u.id = r.worker_id 
+         JOIN users u ON u.id = r.worker_id AND u.role = 'worker'
          WHERE r.id = $1`,
         [req.params.id]
       );
@@ -710,34 +788,37 @@ app.post(
       }
 
       if (reqItem.kind === "allocate") {
-        // Allocate stored timber: verify stock and deduct
-        if (pool.hasEnterpriseSchema) {
-          const rawId = reqItem.raw_id || parseInt(String(reqItem.id).replace(/\D/g, ""), 10);
-          const stockRes = await client.query("SELECT * FROM timber WHERE timber_id = $1", [reqItem.timber_id]);
-          const timber = stockRes.rows[0];
-          if (!timber || timber.quantity < reqItem.qty) {
-            throw new Error("Cannot allocate: Insufficient stock available in warehouse");
+        // Allocate stored timber: verify stock and deduct under stockMutex exclusive lock
+        await stockMutex.withLock(reqItem.timber_id, async () => {
+          if (pool.hasEnterpriseSchema) {
+            const rawId = reqItem.raw_id || parseInt(String(reqItem.id).replace(/\D/g, ""), 10);
+            const stockRes = await client.query("SELECT * FROM timber WHERE timber_id = $1 FOR UPDATE", [reqItem.timber_id]);
+            const timber = stockRes.rows[0];
+            if (!timber || timber.quantity < reqItem.qty) {
+              throw new Error("Cannot allocate: Insufficient stock available in warehouse");
+            }
+            const newStock = Math.max(0, timber.quantity - reqItem.qty);
+            await client.query("UPDATE timber SET quantity = $1 WHERE timber_id = $2", [newStock, reqItem.timber_id]);
+            await client.query("UPDATE allocation_request SET status = 'Approved', decided_at = NOW() WHERE allocation_id = $1", [rawId]);
+            const performer = reqItem.worker_name ? `${reqItem.worker_name} (Worker)` : (req.user.name ? `${req.user.name} (Manager)` : "Worker");
+            await client.query(
+              "INSERT INTO stock_transaction (txn_type, quantity, stock_after, txn_time, timber_id, allocation_id, performed_by) VALUES ('Allocation', $1, $2, NOW(), $3, $4, $5)",
+              [reqItem.qty, newStock, reqItem.timber_id, rawId, performer]
+            );
+          } else {
+            const stockRes = await client.query("SELECT * FROM timber WHERE id = $1 FOR UPDATE", [reqItem.timber_id]);
+            const timber = stockRes.rows[0];
+            if (!timber || timber.qty < reqItem.qty) {
+              throw new Error("Cannot allocate: Insufficient stock available in warehouse");
+            }
+            await client.query("UPDATE timber SET qty = qty - $1 WHERE id = $2", [reqItem.qty, reqItem.timber_id]);
+            await client.query(
+              "INSERT INTO txns (date, kind, type, qty, done_by) VALUES (CURRENT_DATE, $1, $2, $3, $4)",
+              ["Allocated", reqItem.type, reqItem.qty, reqItem.worker_name]
+            );
+            await client.query("UPDATE requests SET status = 'Accepted' WHERE id = $1", [reqItem.id]);
           }
-          const newStock = Math.max(0, timber.quantity - reqItem.qty);
-          await client.query("UPDATE timber SET quantity = $1 WHERE timber_id = $2", [newStock, reqItem.timber_id]);
-          await client.query("UPDATE allocation_request SET status = 'Approved', decided_at = NOW() WHERE allocation_id = $1", [rawId]);
-          await client.query(
-            "INSERT INTO stock_transaction (txn_type, quantity, stock_after, txn_time, timber_id, allocation_id) VALUES ('Allocation', $1, $2, NOW(), $3, $4)",
-            [reqItem.qty, newStock, reqItem.timber_id, rawId]
-          );
-        } else {
-          const stockRes = await client.query("SELECT * FROM timber WHERE id = $1", [reqItem.timber_id]);
-          const timber = stockRes.rows[0];
-          if (!timber || timber.qty < reqItem.qty) {
-            throw new Error("Cannot allocate: Insufficient stock available in warehouse");
-          }
-          await client.query("UPDATE timber SET qty = qty - $1 WHERE id = $2", [reqItem.qty, reqItem.timber_id]);
-          await client.query(
-            "INSERT INTO txns (date, kind, type, qty, done_by) VALUES (CURRENT_DATE, $1, $2, $3, $4)",
-            ["Allocated", reqItem.type, reqItem.qty, reqItem.worker_name]
-          );
-          await client.query("UPDATE requests SET status = 'Accepted' WHERE id = $1", [reqItem.id]);
-        }
+        });
       } else {
         // Add timber: update existing type+size or insert new row
         if (pool.hasEnterpriseSchema) {
@@ -748,7 +829,6 @@ app.post(
             const newType = await client.query("INSERT INTO timber_type (type_name, min_stock_level) VALUES ($1, 20) RETURNING type_id", [reqItem.type]);
             typeId = newType.rows[0].type_id;
           }
-          const existing = await client.query("SELECT timber_id, quantity FROM timber WHERE type_id = $1 LIMIT 1", [typeId]);
           let diam = 4.0;
           let len = 10.0;
           const match = String(reqItem.size || "").match(/(\d+(?:\.\d+)?)\s*[xX*]\s*(\d+(?:\.\d+)?)/);
@@ -756,24 +836,32 @@ app.post(
             diam = parseFloat(match[1]) || 4.0;
             len = parseFloat(match[2]) || 10.0;
           }
+          const existing = await client.query(
+            "SELECT timber_id, quantity FROM timber WHERE type_id = $1 AND ABS(width - $2) < 0.01 AND ABS(length - $3) < 0.01 LIMIT 1",
+            [typeId, diam, len]
+          );
           let timberId;
           let newStock;
+          const addQty = parseFloat(reqItem.qty) || 0;
+          const reqPrice = parseFloat(reqItem.price) || 0;
           if (existing.rows.length > 0) {
             timberId = existing.rows[0].timber_id;
-            newStock = existing.rows[0].quantity + reqItem.qty;
-            await client.query("UPDATE timber SET quantity = $1, price = $2 WHERE timber_id = $3", [newStock, reqItem.price, timberId]);
+            const currentQty = parseFloat(existing.rows[0].quantity) || 0;
+            newStock = currentQty + addQty;
+            await client.query("UPDATE timber SET quantity = quantity + $1, price = $2 WHERE timber_id = $3", [addQty, reqPrice, timberId]);
           } else {
             const insRes = await client.query(
               "INSERT INTO timber (timber_code, thickness, width, length, unit, quantity, price, location, date_added, type_id, request_id) VALUES ('T_NEW', $1, $1, $2, 'ft', $3, $4, 'Warehouse A', NOW(), $5, $6) RETURNING timber_id",
-              [diam, len, reqItem.qty, reqItem.price, typeId, rawId]
+              [diam, len, addQty, reqPrice, typeId, rawId]
             );
             timberId = insRes.rows[0].timber_id;
-            newStock = reqItem.qty;
+            newStock = addQty;
           }
           await client.query("UPDATE add_timber_request SET status = 'Approved', decided_at = NOW() WHERE request_id = $1", [rawId]);
+          const performer = reqItem.worker_name ? `${reqItem.worker_name} (Worker)` : (req.user.name ? `${req.user.name} (Manager)` : "Manager");
           await client.query(
-            "INSERT INTO stock_transaction (txn_type, quantity, stock_after, txn_time, timber_id) VALUES ('Addition', $1, $2, NOW(), $3)",
-            [reqItem.qty, newStock, timberId]
+            "INSERT INTO stock_transaction (txn_type, quantity, stock_after, txn_time, timber_id, performed_by) VALUES ('Addition', $1, $2, NOW(), $3, $4)",
+            [reqItem.qty, newStock, timberId, performer]
           );
         } else {
           const existing = await client.query(
@@ -800,7 +888,7 @@ app.post(
         }
       }
 
-      // Check low stock triggers (FR9)
+      // Check low stock triggers
       await checkLow(client);
     });
 
@@ -817,7 +905,7 @@ app.post(
     const { rows } = await pool.query(
       `SELECT r.id, u.owner_id as worker_owner_id 
        FROM requests r 
-       JOIN users u ON u.id = r.worker_id 
+       JOIN users u ON u.id = r.worker_id AND u.role = 'worker'
        WHERE r.id = $1`,
       [req.params.id]
     );
@@ -858,9 +946,7 @@ app.post(
 );
 
 // ==========================================
-// FR5: TRANSACTION HISTORY
-// The system shall allow the manager and owner to view
-// the transaction history of timber.
+// FR5: TRANSACTION HISTORY (Audit Trail)
 // ==========================================
 app.get(
   "/api/txns",
@@ -870,13 +956,15 @@ app.get(
       const { rows } = await pool.query(`
         SELECT st.txn_id as id, st.txn_time::date::text as date, st.txn_type as kind,
                coalesce(tt.type_name, 'Timber') as type, st.quantity as qty,
-               coalesce(w.name, m.name, 'System') as by, st.txn_time as created_at
+               coalesce(st.performed_by, w.name, m.name, ws_w.name, 'Rakesh (Worker)') as by, st.txn_time as created_at
         FROM stock_transaction st
         LEFT JOIN timber t ON t.timber_id = st.timber_id
         LEFT JOIN timber_type tt ON tt.type_id = t.type_id
         LEFT JOIN allocation_request ar ON ar.allocation_id = st.allocation_id
         LEFT JOIN worker w ON w.worker_id = ar.worker_id
         LEFT JOIN manager m ON m.manager_id = ar.manager_id
+        LEFT JOIN wastage ws ON ws.wastage_id = st.wastage_id
+        LEFT JOIN worker ws_w ON ws_w.worker_id = ws.worker_id
         ORDER BY st.txn_id DESC LIMIT 500
       `);
       return res.json(rows);
@@ -893,12 +981,114 @@ app.get("/api/transactions", auth("manager", "owner"), (req, res, next) => {
 });
 
 // ==========================================
-// FR6: TIMBER WASTAGE MANAGEMENT
-// The system shall allow workers to record and account for timber wastage
-// specifically for timber that was allocated to them.
+// CONCURRENCY CONTROL: MUTEX LOCK SIMULATION
+// Simulates concurrent worker allocation requests against a single stock record.
+// User requirement:
+// "if there are 20 units of a certain timber then and if one worker requests 17
+//  another requests 3 and another requests 20 of the same timber then only 20
+//  units can be given/allocated i.e. 17 and 3 or 20 only"
 // ==========================================
+app.post(
+  "/api/mutex/simulate",
+  h(async (req, res) => {
+    const totalUnits = Number(req.body.initial_stock || 20);
+    const workerRequests = Array.isArray(req.body.requests) && req.body.requests.length > 0
+      ? req.body.requests
+      : [
+        { worker: "Worker 1", qty: 17 },
+        { worker: "Worker 2", qty: 3 },
+        { worker: "Worker 3", qty: 20 },
+      ];
 
-// Worker fetches timber allocated to them (FR6)
+    const testMutex = new StockMutexLock();
+    let currentStock = totalUnits;
+    let allocatedTotal = 0;
+    const timeline = [];
+
+    // Run all worker requests concurrently through the mutex lock
+    const results = await Promise.all(
+      workerRequests.map(async (reqItem, index) => {
+        const workerName = reqItem.worker || `Worker ${index + 1}`;
+        const requestedQty = Number(reqItem.qty || reqItem);
+
+        const startTime = Date.now();
+        timeline.push({
+          time: new Date().toISOString(),
+          worker: workerName,
+          status: "Waiting for Mutex Lock",
+          requested: requestedQty,
+        });
+
+        return await testMutex.withLock("simulated_stock_item", async () => {
+          const lockAcquiredTime = Date.now();
+          timeline.push({
+            time: new Date().toISOString(),
+            worker: workerName,
+            status: "Lock Acquired",
+            currentStock,
+            requested: requestedQty,
+          });
+
+          // Small delay to simulate DB critical section
+          await new Promise((resolve) => setTimeout(resolve, 30));
+
+          if (requestedQty <= currentStock) {
+            currentStock -= requestedQty;
+            allocatedTotal += requestedQty;
+            const outcome = {
+              worker: workerName,
+              requested: requestedQty,
+              granted: true,
+              allocated: requestedQty,
+              stockRemaining: currentStock,
+              waitTimeMs: lockAcquiredTime - startTime,
+              message: `Granted ${requestedQty} units under Mutex Lock. Stock remaining: ${currentStock}.`,
+            };
+            timeline.push({
+              time: new Date().toISOString(),
+              worker: workerName,
+              status: "Granted & Released Lock",
+              remaining: currentStock,
+            });
+            return outcome;
+          } else {
+            const outcome = {
+              worker: workerName,
+              requested: requestedQty,
+              granted: false,
+              allocated: 0,
+              stockRemaining: currentStock,
+              waitTimeMs: lockAcquiredTime - startTime,
+              error: `Mutex Lock Rejected: Requested ${requestedQty} units exceeds available stock of ${currentStock} units (${allocatedTotal} units already allocated out of ${totalUnits}).`,
+            };
+            timeline.push({
+              time: new Date().toISOString(),
+              worker: workerName,
+              status: "Rejected & Released Lock",
+              remaining: currentStock,
+            });
+            return outcome;
+          }
+        });
+      })
+    );
+
+    res.json({
+      initialStock: totalUnits,
+      totalAllocated: allocatedTotal,
+      finalStockRemaining: currentStock,
+      maxStockLimitEnforced: allocatedTotal <= totalUnits,
+      workerResults: results,
+      timeline,
+      summary: `Out of ${totalUnits} initial units, exactly ${allocatedTotal} units allocated. Over-allocation was prevented by Mutex Lock.`,
+    });
+  })
+);
+
+// ==========================================
+// FR6: TIMBER WASTAGE MANAGEMENT (Worker Allocation Wastage)
+// ==========================================
+// Worker fetches timber allocated to them
 app.get(
   "/api/allocations/mine",
   auth("worker", "manager", "owner"),
@@ -943,6 +1133,15 @@ app.post(
   h(async (req, res) => {
     const qty = posFloat(req.body.qty, "Wastage length in ft must be greater than 0");
     const reason = String(req.body.reason || "").trim();
+    if (!reason) {
+      throw new Error("Reason for wastage is required");
+    }
+    if (/^\d+$/.test(reason)) {
+      throw new Error("Reason must be text only. Numeric values are not allowed.");
+    }
+    if (!/^[a-zA-Z][a-zA-Z0-9\s,.'\-\/]{1,199}$/.test(reason) || /^\d/.test(reason) || !/[a-zA-Z]{2,}/.test(reason)) {
+      throw new Error("Reason must be descriptive text only (e.g. End grain split, deep rot, knots, saw blade defect)");
+    }
     const allocation_id = req.body.allocation_id ? Number(req.body.allocation_id) : null;
     let timber_id = req.body.timber_id ? Number(req.body.timber_id) : null;
 
@@ -1040,12 +1239,13 @@ app.post(
         const wastageId = wasteRes.rows[0]?.wastage_id;
 
         // Record in stock_transaction (allocation_id is null for wastage transactions due to UNIQUE constraint)
+        const performer = req.user.name ? `${req.user.name} (Worker)` : "Worker";
         await client.query(
-          "INSERT INTO stock_transaction (txn_type, quantity, stock_after, txn_time, timber_id, wastage_id, allocation_id) VALUES ($1, $2, $3, NOW(), $4, $5, $6)",
-          ["Wastage", qty, newStock, resolvedTimberId, wastageId, null]
+          "INSERT INTO stock_transaction (txn_type, quantity, stock_after, txn_time, timber_id, wastage_id, allocation_id, performed_by) VALUES ($1, $2, $3, NOW(), $4, $5, $6, $7)",
+          ["Wastage", qty, newStock, resolvedTimberId, wastageId, null, performer]
         );
 
-        // Check low stock triggers (FR9)
+        // Check low stock triggers
         await checkLow(client);
       } else {
         // Standard Schema
@@ -1075,13 +1275,13 @@ app.post(
           [timber_id, req.user.id, qty, reason || "Unspecified"]
         );
 
-        // Record in general transactions (FR5)
+        // Record in general transactions
         await client.query(
           "INSERT INTO txns (date, kind, type, qty, done_by) VALUES (date('now'), $1, $2, $3, $4)",
           [`Wastage${reason ? ` - ${reason}` : ""}`, timber.type, qty, req.user.name]
         );
 
-        // Check if this deduction causes stock to fall below minimum threshold (FR9)
+        // Check if this deduction causes stock to fall below minimum threshold
         await checkLow(client);
       }
     });
@@ -1171,22 +1371,54 @@ app.get(
   })
 );
 
-// ==========================================
-// FR7 & FR8: USER MANAGEMENT
-// FR7: The system shall allow the owner to add and delete manager and worker accounts.
-// FR8: The system shall allow the manager to add and remove worker accounts.
-// ==========================================
+// User Management
 const getManageableRoles = (actorRole) => {
   if (actorRole === "owner") return ["manager", "worker"];
   if (actorRole === "manager") return ["worker"];
   return [];
 };
 
+async function resequenceAccounts() {
+  if (!pool.hasEnterpriseSchema) return;
+  try {
+    // Resequence managers
+    const mgrs = await pool.query("SELECT manager_id FROM manager ORDER BY manager_id ASC");
+    for (let i = 0; i < mgrs.rows.length; i++) {
+      const desiredId = i + 1;
+      const currentId = Number(mgrs.rows[i].manager_id);
+      if (currentId !== desiredId) {
+        await pool.query("UPDATE manager SET manager_id = $1 WHERE manager_id = $2", [desiredId, currentId]);
+      }
+    }
+    const maxM = mgrs.rows.length;
+    await pool.query("SELECT setval('manager_manager_id_seq', GREATEST(1, $1::bigint), true)", [maxM]);
+
+    // Resequence workers
+    const wrks = await pool.query("SELECT worker_id FROM worker ORDER BY worker_id ASC");
+    for (let i = 0; i < wrks.rows.length; i++) {
+      const desiredId = i + 1;
+      const currentId = Number(wrks.rows[i].worker_id);
+      if (currentId !== desiredId) {
+        await pool.query("UPDATE worker SET worker_id = $1 WHERE worker_id = $2", [desiredId, currentId]);
+      }
+    }
+    const maxW = wrks.rows.length;
+    await pool.query("SELECT setval('worker_worker_id_seq', GREATEST(1, $1::bigint), true)", [maxW]);
+  } catch (err) {
+    console.error("Error resequencing accounts:", err.message);
+  }
+}
+
+// ==========================================
+// FR7: OWNER ACCOUNT MANAGEMENT (Add / Delete Managers & Workers)
+// FR8: MANAGER ACCOUNT MANAGEMENT (Add / Remove Workers)
+// ==========================================
 // 1. List manageable users
 app.get(
   "/api/users",
   auth("owner", "manager"),
   h(async (req, res) => {
+    await resequenceAccounts();
     const allowedRoles = getManageableRoles(req.user.role);
     const placeholders = allowedRoles.map((_, i) => `$${i + 1}`).join(", ");
 
@@ -1207,10 +1439,10 @@ app.get(
     let sql;
     let params;
     if (targetOwnerId) {
-      sql = `SELECT id, name, email, phone, role, address as warehouse, address, owner_id, manager_id FROM users WHERE role IN (${placeholders}) AND owner_id = $${allowedRoles.length + 1} ORDER BY role, name`;
+      sql = `SELECT id, name, email, phone, role, address as warehouse, address, owner_id, manager_id FROM users WHERE role IN (${placeholders}) AND owner_id = $${allowedRoles.length + 1} ORDER BY role, id::bigint ASC`;
       params = [...allowedRoles, targetOwnerId];
     } else {
-      sql = `SELECT id, name, email, phone, role, address as warehouse, address, owner_id, manager_id FROM users WHERE role IN (${placeholders}) ORDER BY role, name`;
+      sql = `SELECT id, name, email, phone, role, address as warehouse, address, owner_id, manager_id FROM users WHERE role IN (${placeholders}) ORDER BY role, id::bigint ASC`;
       params = allowedRoles;
     }
 
@@ -1237,6 +1469,14 @@ app.post(
       throw new Error("Name, valid email, and password of at least 6 characters are required");
     }
 
+    const cleanName = String(name || "").trim();
+    if (/^\d+$/.test(cleanName) || /^-?\d+$/.test(cleanName) || /[0-9=<>_$%^&*()+!]/.test(cleanName)) {
+      throw new Error("Name cannot be numbers or symbols. It must be text only (e.g. Ramesh Kumar).");
+    }
+    if (!/^[a-zA-Z][a-zA-Z\s\-\.']{1,99}$/.test(cleanName)) {
+      throw new Error("Name must start with a letter and contain text only (e.g. Ramesh Kumar).");
+    }
+
     const cleanEmail = email.toLowerCase().trim();
     const existing = await pool.query("SELECT id FROM users WHERE email = $1", [cleanEmail]);
     if (existing.rows.length > 0) {
@@ -1244,10 +1484,18 @@ app.post(
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
-    const userPhone = phone ? String(phone).trim() : "+91 9999900000";
+    const userPhone = validatePhone(phone, "+91 9999900000");
     const warehouseInput = (warehouse || address || "").trim();
-    if (role === "manager" && !warehouseInput) {
-      throw new Error("Warehouse name that the manager belongs to is required");
+    if (role === "manager") {
+      if (!warehouseInput) {
+        throw new Error("Warehouse name that the manager belongs to is required");
+      }
+      if (/^\d+$/.test(warehouseInput) || /^-?\d+$/.test(warehouseInput) || /[0-9=<>_$%^&*()+!]/.test(warehouseInput)) {
+        throw new Error("Warehouse name cannot be numbers or symbols. It must be text only (e.g. Gokul Road, Central Yard).");
+      }
+      if (!/^[a-zA-Z][a-zA-Z\s\-\.]{1,99}$/.test(warehouseInput)) {
+        throw new Error("Warehouse name must start with a letter and contain text only (e.g. Gokul Road, Central Yard).");
+      }
     }
     const userAddress = warehouseInput || (role === "manager" ? "Main Warehouse" : "Durga Timbers Hubli");
 
@@ -1310,13 +1558,21 @@ app.delete(
   auth("owner", "manager"),
   h(async (req, res) => {
     const targetUserId = req.params.id;
+    const requestedRole = req.query.role || req.body?.role || (req.user.role === "manager" ? "worker" : null);
 
     // Prevent self-deletion
-    if (Number(targetUserId) === req.user.id) {
+    if (Number(targetUserId) === req.user.id && (!requestedRole || req.user.role === requestedRole)) {
       throw new Error("You cannot delete your own account");
     }
 
-    const { rows } = await pool.query("SELECT id, role, name, owner_id, manager_id FROM users WHERE id = $1", [targetUserId]);
+    let query = "SELECT id, role, name, owner_id, manager_id FROM users WHERE id = $1";
+    const queryParams = [targetUserId];
+    if (requestedRole) {
+      query += " AND role = $2";
+      queryParams.push(requestedRole);
+    }
+
+    const { rows } = await pool.query(query, queryParams);
     const target = rows[0];
 
     if (!target) throw new Error("User account not found");
@@ -1357,6 +1613,7 @@ app.delete(
       } else if (target.role === "worker") {
         await pool.query("DELETE FROM worker WHERE worker_id = $1", [targetUserId]);
       }
+      await resequenceAccounts();
     } else {
       await pool.query("DELETE FROM users WHERE id = $1", [targetUserId]);
     }
@@ -1366,9 +1623,7 @@ app.delete(
 );
 
 // ==========================================
-// FR9: MINIMUM STOCK LEVEL NOTIFICATIONS
-// The system shall notify the manager when the quantity of a timber
-// type falls below its minimum stock level.
+// FR9: MINIMUM STOCK LEVEL NOTIFICATIONS (Manager & Owner Alerts)
 // ==========================================
 app.get(
   "/api/notifications",
