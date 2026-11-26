@@ -523,7 +523,16 @@ app.patch(
   auth("manager", "owner"),
   h(async (req, res) => {
     const newMin = posInt(req.body.min, "Minimum stock must be a positive integer");
-    await pool.query("UPDATE timber SET min = $1 WHERE id = $2", [newMin, req.params.id]);
+    if (pool.hasEnterpriseSchema) {
+      const t = await pool.query("SELECT type_id FROM timber WHERE timber_id = $1", [req.params.id]);
+      if (t.rows.length > 0) {
+        await pool.query("UPDATE timber_type SET min_stock_level = $1 WHERE type_id = $2", [newMin, t.rows[0].type_id]);
+      } else {
+        await pool.query("UPDATE timber_type SET min_stock_level = $1 WHERE type_id = $2", [newMin, req.params.id]);
+      }
+    } else {
+      await pool.query("UPDATE timber SET min = $1 WHERE id = $2", [newMin, req.params.id]);
+    }
     await checkLow();
     res.json({ message: "Minimum stock threshold updated successfully", min: newMin });
   })

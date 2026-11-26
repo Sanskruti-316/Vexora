@@ -62,7 +62,7 @@ export default function InventoryTable({ timber = [] }) {
                             <th>Diameter x Length</th>
                             <th className="r">Qty</th>
                             <th className="r">Min</th>
-                            <th className="r">Price</th>
+                            <th className="r">Price per piece</th>
                             <th>Added</th>
                             <th>Status</th>
                         </tr>
