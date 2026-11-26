@@ -1,5 +1,5 @@
 import bcrypt from "bcryptjs";
-import { pool, initDb } from "./db.js";
+import { pool, initDb } from "./db/index.js";
 
 async function seed() {
   await initDb();

@@ -137,7 +137,7 @@ async function runTests() {
     method: "POST",
     token: ownerToken,
     body: {
-      name: "Warehouse Manager 2",
+      name: "Warehouse Manager Two",
       email: newMgrEmail,
       password: "password123",
       role: "manager",

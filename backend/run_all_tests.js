@@ -1,6 +1,6 @@
 import http from "node:http";
 import app, { checkLow } from "./server.js";
-import { initDb } from "./db.js";
+import { initDb } from "./db/index.js";
 
 const PORT = 5055;
 const BASE_URL = `http://localhost:${PORT}/api`;
